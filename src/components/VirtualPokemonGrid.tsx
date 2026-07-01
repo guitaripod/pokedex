@@ -21,7 +21,6 @@ export function VirtualPokemonGrid({
   const containerRef = useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [containerHeight, setContainerHeight] = useState(600)
-  const [containerWidth, setContainerWidth] = useState(1200)
   const [numCols, setNumCols] = useState(6)
 
   // Recalculate columns on resize
@@ -29,7 +28,6 @@ export function VirtualPokemonGrid({
     if (!containerRef.current) return
     const width = containerRef.current.clientWidth
     const cols = Math.max(2, Math.floor((width + gap) / (minCardWidth + gap)))
-    setContainerWidth(width)
     setNumCols(cols)
   }, [minCardWidth, gap])
 
