@@ -36,6 +36,7 @@ function App() {
   const [shinyMode, setShinyMode] = useState(false)
   const [showTeamLab, setShowTeamLab] = useState(false)
   const [matchupCache, setMatchupCache] = useState<Record<number, any>>({})
+  const [encounters, setEncounters] = useState<any[]>([])
   const [onlySpecial, setOnlySpecial] = useState(false)
   const [minBst, setMinBst] = useState(0)
   const [abilityFilter, setAbilityFilter] = useState('')
@@ -231,6 +232,15 @@ function App() {
         setMatchupCache(prev => ({ ...prev, [pokemon.id]: m }))
       }
     }
+
+    // lazy encounters
+    try {
+      const encRes = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemon.id}/encounters`)
+      if (encRes.ok) {
+        const encData = await encRes.json()
+        setEncounters(encData.slice(0, 5)) // top few
+      }
+    } catch {}
   }
 
   const closeModal = () => {
@@ -238,6 +248,7 @@ function App() {
     setModalPokemon(null)
     setMatchups(null)
     setModalShiny(false)
+    setEncounters([])
   }
 
   const navigateModal = (dir: number) => {
@@ -802,6 +813,13 @@ function App() {
 
               {(modalPokemon.habitat || modalPokemon.shape) && (
                 <div className="px-4 sm:px-6 pb-2 text-[10px] text-gray-400">Habitat: {modalPokemon.habitat || '—'} • Shape: {modalPokemon.shape || '—'}</div>
+              )}
+
+              {encounters.length > 0 && (
+                <div className="px-4 sm:px-6 pb-2 text-[10px]">
+                  <div className="text-gray-400 mb-1">Encounters (sample)</div>
+                  <div className="text-white/70">{encounters.map((e: any) => e.location_area?.name?.replace(/-/g, ' ')).filter(Boolean).slice(0,3).join(' • ')}</div>
+                </div>
               )}
 
               <div className="border-t border-white/10 px-4 sm:px-6 py-3 sm:py-4 bg-[#0a0c14]/60 flex items-center justify-between text-xs">
