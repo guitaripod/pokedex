@@ -42,7 +42,7 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' }}
         with:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID || 'REDACTED_CLOUDFLARE_ACCOUNT_ID' }}
+          accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy dist --project-name=pokedex --branch=master
       - name: Note on deploy
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' }}

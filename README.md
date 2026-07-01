@@ -89,7 +89,7 @@ Set these in the repo (Settings > Secrets and variables > Actions):
   6. Create → Copy the token
   7. `gh secret set CLOUDFLARE_API_TOKEN --repo guitaripod/pokedex`
 
-- `CLOUDFLARE_ACCOUNT_ID` (optional but set): `REDACTED_CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_ACCOUNT_ID` (optional but recommended): set it in GitHub Secrets (copy the value from your Cloudflare dashboard)
 
 After setting the token, new pushes to master will auto-deploy.
 
