@@ -10,13 +10,15 @@ Built with React 19, TypeScript, Vite, Tailwind CSS 4, Framer Motion, Lucide ico
 
 - **Instant beautiful experience** — Dark cinematic UI, high-quality official artwork, smooth micro-interactions and modal animations
 - **Powerful exploration** — Instant search (name or number), multi-select type filters, 9 generations + full National Dex
-- **Advanced sorting** — ID, name, or highest HP
+- **Advanced sorting** — ID, name, or highest HP / BST
+- **Advanced filters** — Legendaries + Mythicals, minimum BST, ability search (URL synced)
 - **Favorites system** — Persistent via localStorage with dedicated view and count
-- **Rich detail modal** — Large artwork, flavor text, animated stat bars, height/weight, abilities (hidden flagged), keyboard navigation (← → Esc)
+- **Rich detail modal** — Large artwork, flavor text, animated stat bars + SVG radar chart, height/weight, abilities, evolution chains, level-up moves, cries, type matchups, +TEAM button, keyboard navigation (← → Esc)
+- **Team Lab** (⌘K) — Powerful multi-team builder with persistent saved teams, live coverage from real matchups, smart suggestions, favorites/quick-add from grid, Showdown export, random fill. Teams persist in localStorage.
 - **Progressive loading** — Fast initial load of 180 Pokémon + seamless "Load more"
-- **Fully client-side filtering** — Snappy even with hundreds loaded
-- **Production hardened** — TypeScript strict, proper error states + retry, loading skeletons, abort-safe fetches, optimized build
-- **Keyboard friendly** — Search focus, modal navigation, accessible interactions
+- **Fully client-side filtering** — Snappy even with hundreds loaded. Shareable URLs for filters
+- **Production hardened** — TypeScript strict, proper error states + retry, loading skeletons, optimized build
+- **Keyboard friendly** — Search focus, modal navigation, ⌘K for Team Lab, accessible interactions
 - **Responsive** — Perfect on mobile, tablet, desktop
 
 ## Run locally
