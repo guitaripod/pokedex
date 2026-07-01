@@ -12,9 +12,11 @@ interface PokemonCardProps {
   shiny?: boolean
   onAddToTeam?: (p: Pokemon) => void
   canAddToTeam?: boolean
+  isCaught?: boolean
+  isShinyCaught?: boolean
 }
 
-export const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite, shiny, onAddToTeam, canAddToTeam }: PokemonCardProps) {
+export const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite, shiny, onAddToTeam, canAddToTeam, isCaught, isShinyCaught }: PokemonCardProps) {
   const sprite = getSprite(pokemon, !!shiny)
 
   const handleAdd = (e: React.MouseEvent) => {
@@ -47,10 +49,12 @@ export const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onCl
             <Plus className="w-3.5 h-3.5" />
           </button>
         )}
-        <div className="absolute top-3 left-4">
+        <div className="absolute top-3 left-4 flex items-center gap-1">
           <span className="font-mono text-[10px] font-medium tracking-[1.5px] text-red-400/90">
             #{String(pokemon.id).padStart(3, '0')}
           </span>
+          {isCaught && <span className="text-[8px] px-1 bg-green-500/80 rounded text-black">C</span>}
+          {isShinyCaught && <span className="text-[8px] px-1 bg-yellow-400/80 rounded text-black">S</span>}
         </div>
       </div>
       <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-0.5 sm:pt-1 flex-1 flex flex-col">

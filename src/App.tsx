@@ -41,6 +41,8 @@ function App() {
   const [abilityFilter, setAbilityFilter] = useState('')
   const [compareList, setCompareList] = useState<Pokemon[]>([])
   const [showCompare, setShowCompare] = useState(false)
+  const [caught, setCaught] = useState<Set<number>>(new Set())
+  const [shinyCaught, setShinyCaught] = useState<Set<number>>(new Set())
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
@@ -101,6 +103,18 @@ function App() {
   useEffect(() => {
     loadInitial()
   }, [loadInitial])
+
+  // Load caught/shiny
+  useEffect(() => {
+    try {
+      const c = localStorage.getItem('pokedex-caught')
+      if (c) setCaught(new Set(JSON.parse(c)))
+      const s = localStorage.getItem('pokedex-shiny')
+      if (s) setShinyCaught(new Set(JSON.parse(s)))
+    } catch {}
+  }, [])
+  useEffect(() => { localStorage.setItem('pokedex-caught', JSON.stringify([...caught])) }, [caught])
+  useEffect(() => { localStorage.setItem('pokedex-shiny', JSON.stringify([...shinyCaught])) }, [shinyCaught])
 
   const playCry = useCallback((p: Pokemon) => {
     const url = p.cries?.latest || p.cries?.legacy
@@ -273,6 +287,21 @@ function App() {
     }
   }
 
+  const toggleCaught = (id: number) => {
+    setCaught(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+  const toggleShinyCaught = (id: number) => {
+    setShinyCaught(prev => {
+      const n = new Set(prev)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
+
   const resetFilters = () => {
     setSearch('')
     setActiveTypes(new Set())
@@ -413,6 +442,8 @@ function App() {
           <div className="font-medium text-white">{resultLabel}</div>
           <div className="w-px h-3 bg-white/10" />
           <div className="text-[10px] sm:text-xs">{allPokemon.length} / {totalAvailable} loaded</div>
+          <div className="w-px h-3 bg-white/10" />
+          <div className="text-[10px] text-green-400">Caught: {caught.size} • Shiny: {shinyCaught.size}</div>
         </div>
 
         <button
@@ -472,6 +503,8 @@ function App() {
                 shiny={shinyMode}
                 onAddToTeam={showTeamLab ? (p) => teamsHook.addPokemonToActive(p) : undefined}
                 canAddToTeam={showTeamLab && teamsHook.getActiveMembers().length < 6}
+                isCaught={caught.has(pokemon.id)}
+                isShinyCaught={shinyCaught.has(pokemon.id)}
               />
             )}
           />
@@ -548,6 +581,14 @@ function App() {
                     {modalPokemon.genus && (
                       <div className="text-sm text-gray-400 mt-0.5">{modalPokemon.genus}</div>
                     )}
+                  </div>
+                  <div className="flex gap-2 mt-1">
+                    <button onClick={() => toggleCaught(modalPokemon.id)} className={`text-[10px] px-2 py-0.5 rounded border ${caught.has(modalPokemon.id) ? 'bg-green-500/20 border-green-500/40 text-green-400' : 'border-white/20'}`}>
+                      {caught.has(modalPokemon.id) ? 'CAUGHT' : 'Mark Caught'}
+                    </button>
+                    <button onClick={() => toggleShinyCaught(modalPokemon.id)} className={`text-[10px] px-2 py-0.5 rounded border ${shinyCaught.has(modalPokemon.id) ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-400' : 'border-white/20'}`}>
+                      {shinyCaught.has(modalPokemon.id) ? 'SHINY CAUGHT' : 'Mark Shiny'}
+                    </button>
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <button
