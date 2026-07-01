@@ -16,6 +16,7 @@ import { TeamLab } from './components/TeamLab'
 import { StatRadar } from './components/StatRadar'
 import { Filters } from './components/Filters'
 import { VirtualPokemonGrid } from './components/VirtualPokemonGrid'
+import { exportPokemonCard } from './lib/export'
 
 function App() {
   const { state: urlState, update: updateUrl, reset: resetUrl } = useUrlState()
@@ -633,6 +634,12 @@ function App() {
                       className="text-xs px-2 py-0.5 rounded border border-blue-500/40 text-blue-400 flex items-center gap-1 hover:bg-blue-500/10"
                     >
                       + COMPARE
+                    </button>
+                    <button
+                      onClick={() => exportPokemonCard(modalPokemon, modalShiny)}
+                      className="text-xs px-2 py-0.5 rounded border border-white/20 text-white/60 flex items-center gap-1 hover:text-white"
+                    >
+                      PNG
                     </button>
                   </div>
                 </div>
