@@ -4,6 +4,8 @@ import type { Pokemon } from '../types/pokemon'
 import { getSprite, getBst } from '../types/pokemon'
 import { TypeBadge } from './TypeBadge'
 import { computeAdvancedCoverage, suggestForTeam } from '../lib/analysis'
+import { calculateDamage } from '../lib/damage'
+import { exportTeamToShowdown, parseShowdownTeam } from '../lib/showdown'
 import { toast } from 'sonner'
 
 export interface SavedTeam {
@@ -54,6 +56,8 @@ export function TeamLab({
   const [editName, setEditName] = useState('')
   const [battleAttacker, setBattleAttacker] = useState<Pokemon | undefined>(undefined)
   const [battleDefender, setBattleDefender] = useState<Pokemon | undefined>(undefined)
+  const [calcLevel, setCalcLevel] = useState(50)
+  const [calcPower, setCalcPower] = useState(80)
 
   const team = activeTeam?.members || []
   const canAdd = team.length < MAX_TEAM
@@ -93,21 +97,7 @@ export function TeamLab({
     ? suggestForTeam(allPokemon, team).filter(p => !teamIds.has(p.id)).slice(0, 8)
     : []
 
-  const exportShowdown = () => {
-    if (team.length === 0) return
-    const lines: string[] = []
-    team.forEach(p => {
-      lines.push(p.name)
-      lines.push(`Ability: ${p.abilities[0]?.ability.name.replace('-', ' ') || 'Unknown'}`)
-      lines.push('EVs: 252 HP / 4 Atk / 252 Spe')
-      lines.push('Nature: Jolly')
-      lines.push('')
-    })
-    const text = lines.join('\n')
-    navigator.clipboard.writeText(text).then(() => {
-      toast.success('Copied to clipboard', { description: 'Paste into Pokémon Showdown' })
-    })
-  }
+
 
   const addRandom = () => {
     const pool = allPokemon.filter(p => !teamIds.has(p.id))
@@ -147,9 +137,29 @@ export function TeamLab({
           <button onClick={addRandom} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5">
             <Sparkles className="w-4 h-4" /> Random
           </button>
-          <button onClick={exportShowdown} disabled={team.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 disabled:opacity-40">
-            <Download className="w-4 h-4" /> Export
+          <button onClick={() => {
+            const text = exportTeamToShowdown(team)
+            navigator.clipboard.writeText(text).then(() => toast.success('Exported to clipboard'))
+          }} disabled={team.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 disabled:opacity-40">
+            <Download className="w-4 h-4" /> Export Showdown
           </button>
+          <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 cursor-pointer">
+            <input type="file" accept=".txt" className="hidden" onChange={e => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const reader = new FileReader()
+              reader.onload = ev => {
+                const parsed = parseShowdownTeam(ev.target?.result as string || '')
+                parsed.forEach(p => {
+                  const match = allPokemon.find(ap => ap.name.toLowerCase() === p.name?.toLowerCase())
+                  if (match) onAddPokemon(match)
+                })
+                toast.success('Imported team')
+              }
+              reader.readAsText(file)
+            }} />
+            Import Showdown
+          </label>
           <button onClick={onClear} disabled={team.length === 0} className="px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 disabled:opacity-40">Clear</button>
           <button onClick={onClose} className="ml-1 w-9 h-9 flex items-center justify-center rounded-2xl hover:bg-white/10">
             <X className="w-5 h-5" />
@@ -330,7 +340,15 @@ export function TeamLab({
                   {team.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
                 <div className="text-emerald-400 font-medium">
-                  Est. damage: {calcDamage(battleAttacker, battleDefender)} 
+                  Est. damage: {(() => {
+                    if (!battleAttacker || !battleDefender) return '—'
+                    const res = calculateDamage(battleAttacker, battleDefender, calcPower, calcLevel)
+                    return `${res.min}-${res.max} (${res.percentMin}-${res.percentMax}%)`
+                  })()} 
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <input type="range" min="1" max="100" value={calcLevel} onChange={e => setCalcLevel(+e.target.value)} className="w-20" /> Lvl {calcLevel}
+                  <input type="range" min="10" max="150" value={calcPower} onChange={e => setCalcPower(+e.target.value)} className="w-20" /> Pow {calcPower}
                 </div>
               </div>
             ) : (
@@ -348,20 +366,4 @@ export function TeamLab({
   )
 }
 
-function calcDamage(att?: Pokemon, def?: Pokemon): string {
-  if (!att || !def) return '—'
-  const atk = att.stats.find(s => s.stat.name === 'attack')?.base_stat || 80
-  const defStat = def.stats.find(s => s.stat.name === 'defense')?.base_stat || 80
-  let eff = 1
-  // simple type check
-  const attType = att.types[0]?.type.name
-  const defTypes = def.types.map(t => t.type.name)
-  if (attType === 'fire' && (defTypes.includes('grass') || defTypes.includes('ice'))) eff = 2
-  if (attType === 'water' && (defTypes.includes('fire') || defTypes.includes('ground'))) eff = 2
-  if (attType === 'grass' && (defTypes.includes('water') || defTypes.includes('ground'))) eff = 2
-  if (attType === 'electric' && (defTypes.includes('water') || defTypes.includes('flying'))) eff = 2
-  // resist example
-  if (attType === 'fire' && defTypes.includes('water')) eff = 0.5
-  const dmg = Math.round((atk * 60 / defStat) * eff)
-  return `${dmg} (${eff}x)`
-}
+
