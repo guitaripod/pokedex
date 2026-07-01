@@ -56,3 +56,45 @@ The `dist/` folder contains a fully optimized static site ready for any hosting 
 No external backend required. Everything is self-contained and deployable as static assets.
 
 Enjoy exploring the world of Pokémon.
+
+## GitHub
+
+https://github.com/guitaripod/pokedex (master)
+
+## Live Site
+
+**https://pokedex-a7l.pages.dev**
+
+Hosted on Cloudflare Pages.
+
+## CI / CD
+
+GitHub Actions (`.github/workflows/ci.yml`):
+
+- On PR / push to master: **Release Check** — `npm ci`, `npm run lint`, `npm run build`
+- On push to master: after checks pass, deploys to Cloudflare Pages using Wrangler.
+
+### Required GitHub Secrets
+
+Set these in the repo (Settings > Secrets and variables > Actions):
+
+- `CLOUDFLARE_API_TOKEN`: Cloudflare API token with `Pages:Edit` permission for the account.
+  1. Go to https://dash.cloudflare.com/profile/api-tokens
+  2. Create Token → Custom token
+  3. Permissions: Account | Pages | Edit
+  4. Account Resources: Include All accounts (or your specific)
+  5. TTL or no expiry
+  6. Create → Copy the token
+  7. `gh secret set CLOUDFLARE_API_TOKEN --repo guitaripod/pokedex`
+
+- `CLOUDFLARE_ACCOUNT_ID` (optional but set): `REDACTED_CLOUDFLARE_ACCOUNT_ID`
+
+After setting the token, new pushes to master will auto-deploy.
+
+## Deploy manually
+
+```bash
+npm run build
+wrangler pages deploy dist --project-name=pokedex --branch=master
+```
+
