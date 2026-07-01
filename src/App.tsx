@@ -254,7 +254,10 @@ function App() {
       return
     }
     const audio = new Audio(url)
-    audio.play().catch(() => toast.error('Could not play cry'))
+    audio.addEventListener('error', () => {
+      toast.error('Could not play cry')
+    }, { once: true })
+    audio.play().catch(() => {})
   }, [])
 
   const fetchTypeMatchups = useCallback(async (typeName: string) => {
@@ -1093,7 +1096,7 @@ function App() {
       </AnimatePresence>
 
       <footer className="max-w-7xl mx-auto px-6 pb-8 pt-4 text-center text-[10px] text-gray-600">
-        Production-ready Pokédex • React + TypeScript + Tailwind • Powered by PokéAPI
+        Production-ready Pokédex • React 19 + TypeScript + Tailwind 4 + Framer Motion • Powered by PokéAPI
       </footer>
     </div>
   )
