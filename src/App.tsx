@@ -914,9 +914,11 @@ function App() {
                     <button onClick={() => setModalShiny(!modalShiny)} aria-label="Toggle shiny" className={`text-xs px-2 py-0.5 rounded border flex items-center gap-1 ${modalShiny ? 'border-yellow-400 text-yellow-400' : 'border-white/20 text-white/60'}`}>
                       <Sparkles className="w-3 h-3" /> {modalShiny ? 'SHINY' : 'SHINY'}
                     </button>
-                    <button onClick={() => playCry(modalPokemon)} aria-label="Play cry" className="text-xs px-2 py-0.5 rounded border border-white/20 text-white/60 flex items-center gap-1 hover:text-white">
-                      <Volume2 className="w-3 h-3" /> CRY
-                    </button>
+                    {(modalPokemon.cries?.latest || modalPokemon.cries?.legacy) && (
+                      <button onClick={() => playCry(modalPokemon)} aria-label="Play cry" className="text-xs px-2 py-0.5 rounded border border-white/20 text-white/60 flex items-center gap-1 hover:text-white">
+                        <Volume2 className="w-3 h-3" /> CRY
+                      </button>
+                    )}
                   </div>
                 </div>
 
