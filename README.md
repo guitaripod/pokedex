@@ -1,5 +1,7 @@
 # Pokédex — Production Ready
 
+> **Note:** This was built to quickly test Grok build in Q3 2026.
+
 A beautiful, fully-featured, production-quality Pokédex web application.
 
 Built with React 19, TypeScript, Vite, Tailwind CSS 4, Framer Motion, Lucide icons, and Sonner toasts.
