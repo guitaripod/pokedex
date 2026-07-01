@@ -416,7 +416,11 @@ function App() {
       const nextCount = Math.min(60, totalAvailable - currentOffset)
       const batch = await loadBatch(currentOffset, nextCount)
       if (batch.length > 0) {
-        setAllPokemon(prev => [...prev, ...batch])
+        setAllPokemon(prev => {
+          const existingIds = new Set(prev.map(p => p.id))
+          const unique = batch.filter(p => !existingIds.has(p.id))
+          return unique.length ? [...prev, ...unique] : prev
+        })
         const newOffset = currentOffset + batch.length
         setOffset(newOffset)
         setHasMore(newOffset < totalAvailable)
@@ -623,7 +627,7 @@ function App() {
   const canShowLoadMore = !showFavoritesOnly && hasMore && !search && activeTypes.size === 0 && currentGen === 'all'
 
   useEffect(() => {
-    if (!loadMoreRef.current || !canShowLoadMore) return
+    if (!loadMoreRef.current || !canShowLoadMore || offset === 0) return
     const el = loadMoreRef.current
     const obs = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting && !isLoading) {
@@ -632,7 +636,7 @@ function App() {
     }, { rootMargin: '200px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [canShowLoadMore, isLoading, loadMore])
+  }, [canShowLoadMore, isLoading, loadMore, offset])
 
   const updateGen = (gen: string) => {
     setCurrentGen(gen as any)
