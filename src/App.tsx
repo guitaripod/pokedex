@@ -15,6 +15,7 @@ import { TypeBadge } from './components/TypeBadge'
 import { TeamLab } from './components/TeamLab'
 import { StatRadar } from './components/StatRadar'
 import { Filters } from './components/Filters'
+import { VirtualPokemonGrid } from './components/VirtualPokemonGrid'
 
 function App() {
   const { state: urlState, update: updateUrl, reset: resetUrl } = useUrlState()
@@ -431,9 +432,9 @@ function App() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
-          {isLoading && allPokemon.length === 0 ? (
-            Array.from({ length: 18 }).map((_, i) => (
+        {isLoading && allPokemon.length === 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
+            {Array.from({ length: 18 }).map((_, i) => (
               <div key={i} className="bg-[#111827] rounded-3xl overflow-hidden border border-white/5">
                 <div className="h-[138px] skeleton" />
                 <div className="px-4 pb-4 pt-3">
@@ -444,11 +445,14 @@ function App() {
                   </div>
                 </div>
               </div>
-            ))
-          ) : (
-            displayed.map(pokemon => (
+            ))}
+          </div>
+        ) : (
+          <VirtualPokemonGrid
+            items={displayed}
+            rowHeight={170}
+            renderItem={(pokemon) => (
               <PokemonCard
-                key={pokemon.id}
                 pokemon={pokemon}
                 isFavorite={isFavorite(pokemon.id)}
                 onClick={() => openModal(pokemon)}
@@ -457,9 +461,9 @@ function App() {
                 onAddToTeam={showTeamLab ? (p) => teamsHook.addPokemonToActive(p) : undefined}
                 canAddToTeam={showTeamLab && teamsHook.getActiveMembers().length < 6}
               />
-            ))
-          )}
-        </div>
+            )}
+          />
+        )}
 
         {canShowLoadMore && (
           <div className="flex justify-center mt-8">
