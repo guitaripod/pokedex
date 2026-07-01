@@ -769,6 +769,16 @@ function App() {
                     </div>
                   </div>
                 )}
+                {modalPokemon.fullMoves && modalPokemon.fullMoves.length > 0 && (
+                  <div className="mb-5">
+                    <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-2 px-1">Sample Learnset</div>
+                    <div className="flex flex-wrap gap-1.5 text-[9px]">
+                      {modalPokemon.fullMoves.map((m, i) => (
+                        <div key={i} className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 capitalize">{m.name.replace(/-/g, ' ')} ({m.method})</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {modalPokemon.evolutions && modalPokemon.evolutions.length > 1 && (
                   <div className="mb-2">

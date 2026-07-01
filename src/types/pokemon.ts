@@ -52,6 +52,7 @@ export interface Pokemon {
   evolutions?: EvolutionStep[]
   cries?: { latest?: string | null; legacy?: string | null }
   levelUpMoves?: { name: string; level: number }[]
+  fullMoves?: { name: string; method: string; level?: number }[]
   is_legendary?: boolean
   is_mythical?: boolean
   is_baby?: boolean

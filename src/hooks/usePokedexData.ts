@@ -91,16 +91,18 @@ export function usePokedexData() {
       } catch {}
 
       const levelUp: { name: string; level: number }[] = []
-      const seenMoves = new Set<string>()
+      const fullMoves: { name: string; method: string; level?: number }[] = []
+      const seen = new Set<string>()
       for (const m of (data.moves || [])) {
-        const v = (m.version_group_details || []).find((vd: any) => vd.move_learn_method?.name === 'level-up')
-        if (v) {
-          const nm = m.move.name
-          if (!seenMoves.has(nm)) {
-            seenMoves.add(nm)
-            levelUp.push({ name: nm, level: v.level_learned_at || 0 })
-          }
+        const details = m.version_group_details || []
+        const v = details.find((vd: any) => vd.move_learn_method?.name === 'level-up')
+        const nm = m.move.name
+        if (v && !seen.has(nm)) {
+          seen.add(nm)
+          levelUp.push({ name: nm, level: v.level_learned_at || 0 })
         }
+        const method = details[0]?.move_learn_method?.name || 'other'
+        fullMoves.push({ name: nm, method: method.replace('-', ' '), level: v?.level_learned_at })
       }
       levelUp.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
 
@@ -128,6 +130,7 @@ export function usePokedexData() {
         evolution_chain_url: speciesData.evolution_chain?.url,
         cries: data.cries,
         levelUpMoves: levelUp.slice(0, 8),
+        fullMoves: fullMoves.slice(0, 12),
         is_legendary: speciesData.is_legendary,
         is_mythical: speciesData.is_mythical,
         is_baby: speciesData.is_baby,
