@@ -52,9 +52,18 @@ export function TeamLab({
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [battleAttacker, setBattleAttacker] = useState<Pokemon | undefined>(undefined)
+  const [battleDefender, setBattleDefender] = useState<Pokemon | undefined>(undefined)
 
   const team = activeTeam?.members || []
   const canAdd = team.length < MAX_TEAM
+
+  useEffect(() => {
+    if (team.length > 0) {
+      setBattleAttacker(team[0])
+      setBattleDefender(team.length > 1 ? team[1] : team[0])
+    }
+  }, [activeTeamId, team])
 
   // Ensure matchups for current team members when active team changes
   useEffect(() => {
@@ -300,6 +309,36 @@ export function TeamLab({
             </div>
           )}
         </div>
+
+        {/* Basic Battle Preview */}
+        <div className="mt-8">
+          <div className="uppercase tracking-[1.5px] text-xs text-gray-400 mb-3">Quick Battle Preview (approx)</div>
+          <div className="bg-[#111827] rounded-3xl p-4 text-sm">
+            {team.length >= 2 ? (
+              <div className="flex flex-col sm:flex-row gap-4 items-center">
+                <select className="bg-[#0a0c14] border border-white/10 rounded px-3 py-1" onChange={e => {
+                  const p = team.find(t => t.id === parseInt(e.target.value))
+                  if (p) setBattleAttacker(p)
+                }} value={battleAttacker?.id || ''}>
+                  {team.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <span className="text-gray-500">vs</span>
+                <select className="bg-[#0a0c14] border border-white/10 rounded px-3 py-1" onChange={e => {
+                  const p = team.find(t => t.id === parseInt(e.target.value))
+                  if (p) setBattleDefender(p)
+                }} value={battleDefender?.id || ''}>
+                  {team.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                <div className="text-emerald-400 font-medium">
+                  Est. damage: {calcDamage(battleAttacker, battleDefender)} 
+                </div>
+              </div>
+            ) : (
+              <div className="text-gray-500">Add at least 2 Pokémon to team for battle preview.</div>
+            )}
+            <div className="text-[10px] text-gray-500 mt-2">Rough calc: Atk * 60 / Def * type effectiveness. For fun/learning only.</div>
+          </div>
+        </div>
       </div>
 
       <div className="border-t border-white/10 p-4 text-center text-xs text-gray-500 bg-[#0a0c14]">
@@ -307,4 +346,22 @@ export function TeamLab({
       </div>
     </div>
   )
+}
+
+function calcDamage(att?: Pokemon, def?: Pokemon): string {
+  if (!att || !def) return '—'
+  const atk = att.stats.find(s => s.stat.name === 'attack')?.base_stat || 80
+  const defStat = def.stats.find(s => s.stat.name === 'defense')?.base_stat || 80
+  let eff = 1
+  // simple type check
+  const attType = att.types[0]?.type.name
+  const defTypes = def.types.map(t => t.type.name)
+  if (attType === 'fire' && (defTypes.includes('grass') || defTypes.includes('ice'))) eff = 2
+  if (attType === 'water' && (defTypes.includes('fire') || defTypes.includes('ground'))) eff = 2
+  if (attType === 'grass' && (defTypes.includes('water') || defTypes.includes('ground'))) eff = 2
+  if (attType === 'electric' && (defTypes.includes('water') || defTypes.includes('flying'))) eff = 2
+  // resist example
+  if (attType === 'fire' && defTypes.includes('water')) eff = 0.5
+  const dmg = Math.round((atk * 60 / defStat) * eff)
+  return `${dmg} (${eff}x)`
 }
