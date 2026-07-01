@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue, memo } from 'react'
 import { Heart, Search, X, ChevronLeft, ChevronRight, RefreshCw, Plus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -94,7 +94,7 @@ function getTypeBadge(type: string, interactive?: boolean, onClick?: () => void)
   )
 }
 
-function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite }: {
+const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite }: {
   pokemon: Pokemon
   isFavorite: boolean
   onClick: () => void
@@ -105,11 +105,11 @@ function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite }: {
     `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.id}.png`
 
   return (
-    <div onClick={onClick} className="pokedex-card group bg-[#111827] rounded-3xl overflow-hidden cursor-pointer flex flex-col">
-      <div className="relative bg-[#0a0c14] px-4 pt-5 pb-3 flex justify-center items-center h-[138px]">
+    <div onClick={onClick} className="pokedex-card group bg-[#111827] rounded-3xl overflow-hidden cursor-pointer flex flex-col touch-manipulation">
+      <div className="relative bg-[#0a0c14] px-3 sm:px-4 pt-4 sm:pt-5 pb-2 sm:pb-3 flex justify-center items-center h-[120px] sm:h-[138px]">
         <img
           src={sprite}
-          className="pokemon-img max-h-[118px] max-w-[118px] object-contain drop-shadow-xl select-none"
+          className="pokemon-img max-h-[100px] max-w-[100px] sm:max-h-[118px] sm:max-w-[118px] object-contain drop-shadow-xl select-none"
           alt={pokemon.name}
           loading="lazy"
         />
@@ -126,21 +126,21 @@ function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite }: {
           </span>
         </div>
       </div>
-      <div className="px-4 pb-4 pt-1 flex-1 flex flex-col">
-        <div className="font-semibold text-[15px] capitalize tracking-[-0.2px] mb-2">{pokemon.name}</div>
-        <div className="flex gap-1.5 mt-auto">
+      <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-0.5 sm:pt-1 flex-1 flex flex-col">
+        <div className="font-semibold text-sm sm:text-[15px] capitalize tracking-[-0.2px] mb-1.5 sm:mb-2">{pokemon.name}</div>
+        <div className="flex gap-1 sm:gap-1.5 mt-auto">
           {pokemon.types.map(t => getTypeBadge(t.type.name))}
         </div>
       </div>
     </div>
   )
-}
+})
 
-function StatBar({ label, value }: { label: string; value: number }) {
+const StatBar = memo(function StatBar({ label, value }: { label: string; value: number }) {
   const pct = Math.min(Math.max((value / 255) * 100, 8), 100)
   return (
     <div className="stat-row">
-      <div className="stat-name">{label}</div>
+      <div className="stat-name text-[10px] sm:text-xs w-12 sm:w-[58px]">{label}</div>
       <div className="flex-1 h-2.5 bg-white/10 rounded-full overflow-hidden">
         <motion.div
           className="h-full rounded-full bg-[#ef4444]"
@@ -152,7 +152,7 @@ function StatBar({ label, value }: { label: string; value: number }) {
       <div className="w-8 font-mono text-right font-semibold tabular-nums text-sm text-white/90">{value}</div>
     </div>
   )
-}
+})
 
 function App() {
   const [allPokemon, setAllPokemon] = useState<Pokemon[]>([])
@@ -160,7 +160,6 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set())
   const [currentGen, setCurrentGen] = useState<'all' | string>('all')
   const [sortKey, setSortKey] = useState<SortKey>('id-asc')
@@ -184,10 +183,7 @@ function App() {
     localStorage.setItem('pokedex-favorites', JSON.stringify([...favorites]))
   }, [favorites])
 
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 140)
-    return () => clearTimeout(t)
-  }, [search])
+  const deferredSearch = useDeferredValue(search)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -370,10 +366,11 @@ function App() {
       result = result.filter(p => p.id >= range[0] && p.id <= range[1])
     }
 
-    if (debouncedSearch) {
+    if (deferredSearch) {
+      const term = deferredSearch.trim().toLowerCase()
       result = result.filter(p =>
-        p.name.toLowerCase().includes(debouncedSearch) ||
-        String(p.id).includes(debouncedSearch)
+        p.name.toLowerCase().includes(term) ||
+        String(p.id).includes(term)
       )
     }
 
@@ -402,7 +399,7 @@ function App() {
     })
 
     return result
-  }, [allPokemon, debouncedSearch, activeTypes, currentGen, sortKey, showFavoritesOnly, favorites])
+  }, [allPokemon, deferredSearch, activeTypes, currentGen, sortKey, showFavoritesOnly, favorites])
 
   const openModal = async (pokemon: Pokemon) => {
     setSelectedPokemon(pokemon)
@@ -478,32 +475,32 @@ function App() {
   return (
     <div className="min-h-screen bg-[#0a0c14] text-white">
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0c14]/95 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-x-3 cursor-pointer" onClick={resetFilters} aria-label="Reset all filters">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-x-2 sm:gap-x-3 cursor-pointer min-w-0" onClick={resetFilters} aria-label="Reset all filters">
             <div className="pokeball" />
-            <span className="text-3xl font-semibold tracking-tighter">Pokédex</span>
+            <span className="text-2xl sm:text-3xl font-semibold tracking-tighter">Pokédex</span>
           </div>
 
-          <div className="flex-1 max-w-md mx-4">
+          <div className="flex-1 max-w-[180px] sm:max-w-md mx-2 sm:mx-4 min-w-0">
             <div className="relative">
-              <Search className="absolute left-4 top-3 text-gray-400 w-4 h-4" />
+              <Search className="absolute left-3 top-2.5 text-gray-400 w-3.5 h-3.5 sm:left-4 sm:top-3 sm:w-4 sm:h-4" />
               <input
                 ref={searchInputRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name or number"
-                className="search-input w-full bg-[#111827] border border-white/10 focus:border-red-500/50 pl-11 pr-4 py-2.5 rounded-2xl text-sm placeholder:text-gray-500 outline-none"
+                placeholder="Search name or #"
+                className="search-input w-full bg-[#111827] border border-white/10 focus:border-red-500/50 pl-8 sm:pl-11 pr-3 sm:pr-4 py-2 sm:py-2.5 rounded-2xl text-sm placeholder:text-gray-500 outline-none"
               />
             </div>
           </div>
 
-          <div className="flex items-center gap-x-2">
+          <div className="flex items-center gap-x-1 sm:gap-x-2">
             <button
               onClick={toggleFavoritesView}
               aria-label={showFavoritesOnly ? 'Show all Pokémon' : 'Show favorites only'}
-              className={`flex items-center gap-x-2 px-4 py-2 rounded-2xl text-sm font-medium border transition-colors ${showFavoritesOnly ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'border-white/10 hover:bg-white/5'}`}
+              className={`flex items-center gap-x-1.5 sm:gap-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-medium border transition-colors ${showFavoritesOnly ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'border-white/10 hover:bg-white/5'}`}
             >
-              <Heart className="w-4 h-4" fill={showFavoritesOnly ? 'currentColor' : 'none'} />
+              <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill={showFavoritesOnly ? 'currentColor' : 'none'} />
               <span>{favorites.size}</span>
             </button>
 
@@ -512,7 +509,7 @@ function App() {
                 value={currentGen}
                 onChange={(e) => updateGen(e.target.value)}
                 aria-label="Filter by generation"
-                className="appearance-none bg-[#111827] border border-white/10 text-sm rounded-2xl px-4 py-2 pr-9 font-medium cursor-pointer hover:border-white/20 focus:outline-none focus:border-red-500/40"
+                className="appearance-none bg-[#111827] border border-white/10 text-xs sm:text-sm rounded-2xl px-2 sm:px-4 py-1 sm:py-2 pr-6 sm:pr-9 font-medium cursor-pointer hover:border-white/20 focus:outline-none focus:border-red-500/40 max-w-[110px] sm:max-w-none"
               >
                 <option value="all">National Dex</option>
                 <option value="1">Kanto (1–151)</option>
@@ -531,16 +528,16 @@ function App() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 pt-6">
-        <div className="flex items-center justify-between mb-3 px-1">
-          <div className="uppercase text-xs tracking-[1.5px] font-semibold text-gray-400">Types</div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
+        <div className="flex items-center justify-between mb-2 sm:mb-3 px-1">
+          <div className="uppercase text-[10px] sm:text-xs tracking-[1.5px] font-semibold text-gray-400">Types</div>
           {activeTypes.size > 0 && (
-            <button onClick={clearTypes} aria-label="Clear type filters" className="text-xs text-gray-400 hover:text-white flex items-center gap-1.5">
+            <button onClick={clearTypes} aria-label="Clear type filters" className="text-[10px] sm:text-xs text-gray-400 hover:text-white flex items-center gap-1">
               <X className="w-3 h-3" /> Clear
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1 sm:gap-1.5">
           {ALL_TYPES.map(type => {
             const active = activeTypes.has(type)
             const color = TYPE_COLORS[type]
@@ -548,7 +545,7 @@ function App() {
               <button
                 key={type}
                 onClick={() => toggleType(type)}
-                className={`type-filter px-3 py-1 text-xs font-semibold rounded-2xl border border-transparent ${active ? 'active' : ''}`}
+                className={`type-filter px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold rounded-2xl border border-transparent ${active ? 'active' : ''}`}
                 style={{
                   backgroundColor: active ? color.bg : '#111827',
                   color: active ? color.text : '#d1d5db'
@@ -561,23 +558,23 @@ function App() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 pt-5 pb-2 flex items-center justify-between text-sm">
-        <div className="flex items-center gap-x-3 text-gray-400">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-1.5 flex items-center justify-between text-xs sm:text-sm">
+        <div className="flex items-center gap-x-2 sm:gap-x-3 text-gray-400">
           <div className="font-medium text-white">{resultLabel}</div>
           <div className="w-px h-3 bg-white/10" />
-          <div className="text-xs">{allPokemon.length} / {totalAvailable} loaded</div>
+          <div className="text-[10px] sm:text-xs">{allPokemon.length} / {totalAvailable} loaded</div>
         </div>
 
         <button
           onClick={changeSort}
           aria-label="Change sort order"
-          className="flex items-center gap-x-1.5 px-3 py-1.5 bg-[#111827] hover:bg-[#1f2937] border border-white/10 rounded-2xl text-xs font-medium transition-colors"
+          className="flex items-center gap-x-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-[#111827] hover:bg-[#1f2937] border border-white/10 rounded-2xl text-[10px] sm:text-xs font-medium transition-colors"
         >
           <span>{currentSortLabel}</span>
         </button>
       </div>
 
-      <main className="max-w-7xl mx-auto px-6 pb-12">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pb-8 sm:pb-12">
         {error && (
           <div className="flex flex-col items-center py-12 text-center">
             <div className="text-red-400 mb-3">{error}</div>
@@ -588,16 +585,16 @@ function App() {
         )}
 
         {!error && displayed.length === 0 && !isLoading && (
-          <div className="text-center py-16">
-            <div className="text-gray-500 mb-2">No results found</div>
+          <div className="text-center py-10 sm:py-16">
+            <div className="text-gray-500 mb-2 text-sm">No results found</div>
             {currentGen !== 'all' && (
-              <div className="text-xs text-gray-600 mb-3">Load more to reveal this generation</div>
+              <div className="text-[10px] sm:text-xs text-gray-600 mb-3">Load more to reveal this generation</div>
             )}
             <button onClick={resetFilters} className="text-sm text-red-400 hover:text-red-300">Reset filters</button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3 sm:gap-4">
           {isLoading && allPokemon.length === 0 ? (
             Array.from({ length: 18 }).map((_, i) => (
               <div key={i} className="bg-[#111827] rounded-3xl overflow-hidden border border-white/5">
@@ -629,7 +626,7 @@ function App() {
             <button
               onClick={loadMore}
               disabled={isLoading}
-              className="flex items-center gap-x-2 px-8 py-3 bg-[#111827] hover:bg-white/5 border border-white/10 rounded-3xl text-sm font-semibold transition-all active:scale-[0.985] disabled:opacity-60"
+              className="flex items-center gap-x-2 px-6 sm:px-8 py-2.5 sm:py-3 bg-[#111827] hover:bg-white/5 border border-white/10 rounded-3xl text-sm font-semibold transition-all active:scale-[0.985] disabled:opacity-60"
             >
               {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               <span>{isLoading ? 'Loading...' : 'Load more Pokémon'}</span>
@@ -650,7 +647,7 @@ function App() {
               exit={{ opacity: 0, y: 10, scale: 0.985 }}
               transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
               onClick={e => e.stopPropagation()}
-              className="w-full max-w-[460px] bg-[#111827] rounded-3xl border border-white/10 shadow-2xl overflow-hidden pokemon-modal"
+              className="w-full max-w-[95vw] sm:max-w-[460px] mx-auto bg-[#111827] rounded-3xl border border-white/10 shadow-2xl overflow-hidden pokemon-modal"
             >
               <div className="relative px-6 pt-6 pb-2 bg-gradient-to-b from-black/40 to-transparent">
                 <div className="flex items-center justify-between">
@@ -668,12 +665,12 @@ function App() {
                 </div>
               </div>
 
-              <div className="px-6 pb-6 -mt-1">
+              <div className="px-4 sm:px-6 pb-5 sm:pb-6 -mt-1">
                 <div className="flex justify-center -mt-2 mb-2">
-                  <div className="relative w-52 h-52 flex items-center justify-center bg-[#0a0c14] rounded-[3rem]">
+                  <div className="relative w-40 h-40 sm:w-52 sm:h-52 flex items-center justify-center bg-[#0a0c14] rounded-[2.5rem] sm:rounded-[3rem]">
                     <img
                       src={modalPokemon.sprites.other?.['official-artwork']?.front_default || modalPokemon.sprites.front_default || `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${modalPokemon.id}.png`}
-                      className="max-h-[190px] max-w-[190px] drop-shadow-2xl select-none"
+                      className="max-h-[130px] max-w-[130px] sm:max-h-[190px] sm:max-w-[190px] drop-shadow-2xl select-none"
                       alt={modalPokemon.name}
                     />
                   </div>
@@ -743,9 +740,9 @@ function App() {
                 </div>
               </div>
 
-              <div className="border-t border-white/10 px-6 py-4 bg-[#0a0c14]/60 flex items-center justify-between text-xs">
+              <div className="border-t border-white/10 px-4 sm:px-6 py-3 sm:py-4 bg-[#0a0c14]/60 flex items-center justify-between text-xs">
                 <div className="text-gray-400">Data from PokéAPI</div>
-                <button onClick={closeModal} className="px-4 py-1.5 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-medium">Close</button>
+                <button onClick={closeModal} className="px-3 sm:px-4 py-1 sm:py-1.5 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-medium">Close</button>
               </div>
             </motion.div>
           </div>

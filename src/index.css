@@ -131,8 +131,6 @@ body {
 }
 
 .stat-name {
-  width: 58px;
-  font-size: 0.75rem;
   font-weight: 500;
   color: #9ca3af;
   flex-shrink: 0;
