@@ -6,6 +6,7 @@ import { TypeBadge } from './TypeBadge'
 import { computeAdvancedCoverage, suggestForTeam } from '../lib/analysis'
 import { calculateDamage } from '../lib/damage'
 import { exportTeamToShowdown, parseShowdownTeam } from '../lib/showdown'
+import { exportTeamImage } from '../lib/export'
 import { toast } from 'sonner'
 
 export interface SavedTeam {
@@ -142,6 +143,9 @@ export function TeamLab({
             navigator.clipboard.writeText(text).then(() => toast.success('Exported to clipboard'))
           }} disabled={team.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 disabled:opacity-40">
             <Download className="w-4 h-4" /> Export Showdown
+          </button>
+          <button onClick={() => exportTeamImage(team)} disabled={team.length === 0} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 disabled:opacity-40">
+            PNG Team
           </button>
           <label className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-2xl border border-white/10 hover:bg-white/5 cursor-pointer">
             <input type="file" accept=".txt" className="hidden" onChange={e => {
