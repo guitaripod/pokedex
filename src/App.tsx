@@ -1,251 +1,103 @@
-import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue, memo, Fragment } from 'react'
-import { Heart, Search, X, ChevronLeft, ChevronRight, RefreshCw, Plus, Volume2, Sparkles, Star } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue, Fragment } from 'react'
+import { Heart, Search, X, ChevronLeft, ChevronRight, RefreshCw, Plus, Volume2, Sparkles, Star, Users } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
-interface PokemonType {
-  type: { name: string }
-}
-
-interface Stat {
-  base_stat: number
-  stat: { name: string }
-}
-
-interface Ability {
-  ability: { name: string }
-  is_hidden: boolean
-}
-
-interface Sprites {
-  front_default: string | null
-  front_shiny?: string | null
-  other?: {
-    'official-artwork'?: { front_default: string | null; front_shiny?: string | null }
-    home?: { front_default?: string | null; front_shiny?: string | null }
-  }
-}
-
-interface EvolutionStep {
-  name: string
-  id: number
-  condition?: string
-}
-
-interface Pokemon {
-  id: number
-  name: string
-  types: PokemonType[]
-  sprites: Sprites
-  height: number
-  weight: number
-  stats: Stat[]
-  abilities: Ability[]
-  flavor_text?: string
-  base_experience?: number
-  capture_rate?: number
-  base_happiness?: number
-  growth_rate?: string
-  hatch_counter?: number
-  gender_rate?: number
-  egg_groups?: string[]
-  color?: string
-  habitat?: string
-  shape?: string
-  genus?: string
-  evolution_chain_url?: string
-  evolutions?: EvolutionStep[]
-  cries?: { latest?: string | null; legacy?: string | null }
-  levelUpMoves?: { name: string; level: number }[]
-  is_legendary?: boolean
-  is_mythical?: boolean
-  is_baby?: boolean
-}
-
-const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
-  normal: { bg: '#A8A77A', text: '#111827' },
-  fire: { bg: '#EE8130', text: '#111827' },
-  water: { bg: '#6390F0', text: '#fff' },
-  electric: { bg: '#F7D02C', text: '#111827' },
-  grass: { bg: '#7AC74C', text: '#111827' },
-  ice: { bg: '#96D9D6', text: '#111827' },
-  fighting: { bg: '#C22E28', text: '#fff' },
-  poison: { bg: '#A33EA1', text: '#fff' },
-  ground: { bg: '#E2BF65', text: '#111827' },
-  flying: { bg: '#A98FF3', text: '#111827' },
-  psychic: { bg: '#F95587', text: '#fff' },
-  bug: { bg: '#A6B91A', text: '#111827' },
-  rock: { bg: '#B6A136', text: '#111827' },
-  ghost: { bg: '#735797', text: '#fff' },
-  dragon: { bg: '#6F35FC', text: '#fff' },
-  dark: { bg: '#705746', text: '#fff' },
-  steel: { bg: '#B7B7CE', text: '#111827' },
-  fairy: { bg: '#D685AD', text: '#111827' },
-}
-
-const ALL_TYPES = Object.keys(TYPE_COLORS)
-
-const GEN_RANGES: Record<string, [number, number]> = {
-  '1': [1, 151],
-  '2': [152, 251],
-  '3': [252, 386],
-  '4': [387, 493],
-  '5': [494, 649],
-  '6': [650, 721],
-  '7': [722, 809],
-  '8': [810, 905],
-  '9': [906, 1025],
-}
-
-const SORT_OPTIONS = [
-  { value: 'id-asc', label: 'ID (Low to High)' },
-  { value: 'id-desc', label: 'ID (High to Low)' },
-  { value: 'name-asc', label: 'Name (A–Z)' },
-  { value: 'name-desc', label: 'Name (Z–A)' },
-  { value: 'hp', label: 'Highest HP' },
-  { value: 'bst', label: 'Highest BST' },
-] as const
-
-type SortKey = typeof SORT_OPTIONS[number]['value']
-
-function getSprite(p: Pokemon, shiny = false): string {
-  const o = p.sprites.other?.['official-artwork']
-  if (shiny) {
-    if (o?.front_shiny) return o.front_shiny
-    if (p.sprites.front_shiny) return p.sprites.front_shiny
-  }
-  if (o?.front_default) return o.front_default
-  if (p.sprites.front_default) return p.sprites.front_default
-  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`
-}
-
-function getBst(p: Pokemon): number {
-  return p.stats.reduce((s, st) => s + (st.base_stat || 0), 0)
-}
-
-function getTypeBadge(type: string, interactive?: boolean, onClick?: () => void) {
-  const color = TYPE_COLORS[type] || { bg: '#64748b', text: '#fff' }
-  return (
-    <span
-      onClick={interactive && onClick ? onClick : undefined}
-      className={`type-badge ${interactive ? 'cursor-pointer hover:brightness-105 active:scale-[0.96]' : ''}`}
-      style={{ backgroundColor: color.bg, color: color.text }}
-    >
-      {type}
-    </span>
-  )
-}
-
-const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite, shiny }: {
-  pokemon: Pokemon
-  isFavorite: boolean
-  onClick: () => void
-  onToggleFavorite: (e: React.MouseEvent) => void
-  shiny?: boolean
-}) {
-  const sprite = getSprite(pokemon, !!shiny)
-
-  return (
-    <div onClick={onClick} className="pokedex-card group bg-[#111827] rounded-3xl overflow-hidden cursor-pointer flex flex-col touch-manipulation">
-      <div className="relative bg-[#0a0c14] px-3 sm:px-4 pt-4 sm:pt-5 pb-2 sm:pb-3 flex justify-center items-center h-[120px] sm:h-[138px]">
-        <img
-          src={sprite}
-          className="pokemon-img max-h-[100px] max-w-[100px] sm:max-h-[118px] sm:max-w-[118px] object-contain drop-shadow-xl select-none"
-          alt={pokemon.name}
-          loading="lazy"
-        />
-        <button
-          onClick={onToggleFavorite}
-          aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          className={`absolute top-3 right-3 w-8 h-8 flex items-center justify-center transition-all ${isFavorite ? 'text-red-400' : 'text-white/30 group-hover:text-white/60'}`}
-        >
-          <Heart className="w-4 h-4" fill={isFavorite ? 'currentColor' : 'none'} />
-        </button>
-        <div className="absolute top-3 left-4">
-          <span className="font-mono text-[10px] font-medium tracking-[1.5px] text-red-400/90">
-            #{String(pokemon.id).padStart(3, '0')}
-          </span>
-        </div>
-      </div>
-      <div className="px-3 sm:px-4 pb-3 sm:pb-4 pt-0.5 sm:pt-1 flex-1 flex flex-col">
-        <div className="font-semibold text-sm sm:text-[15px] capitalize tracking-[-0.2px] mb-1.5 sm:mb-2">{pokemon.name}</div>
-        <div className="flex gap-1 sm:gap-1.5 mt-auto">
-          {pokemon.types.map(t => getTypeBadge(t.type.name))}
-        </div>
-      </div>
-    </div>
-  )
-})
-
-const StatBar = memo(function StatBar({ label, value }: { label: string; value: number }) {
-  const pct = Math.min(Math.max((value / 255) * 100, 8), 100)
-  return (
-    <div className="stat-row">
-      <div className="stat-name text-[10px] sm:text-xs w-12 sm:w-[58px]">{label}</div>
-      <div className="flex-1 h-2.5 bg-white/10 rounded-full overflow-hidden">
-        <motion.div
-          className="h-full rounded-full bg-[#ef4444]"
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, ease: [0.34, 1.56, 0.64, 1], delay: 0.05 }}
-        />
-      </div>
-      <div className="w-8 font-mono text-right font-semibold tabular-nums text-sm text-white/90">{value}</div>
-    </div>
-  )
-})
+import type { Pokemon, SortKey } from './types/pokemon'
+import { GEN_RANGES, SORT_OPTIONS, getSprite, getBst } from './types/pokemon'
+import { useFavorites } from './hooks/useFavorites'
+import { usePokedexData } from './hooks/usePokedexData'
+import { useUrlState } from './hooks/useUrlState'
+import { useTeams } from './hooks/useTeams'
+import { PokemonCard } from './components/PokemonCard'
+import { StatBar } from './components/StatBar'
+import { TypeBadge } from './components/TypeBadge'
+import { TeamLab } from './components/TeamLab'
+import { StatRadar } from './components/StatRadar'
+import { Filters } from './components/Filters'
 
 function App() {
-  const [allPokemon, setAllPokemon] = useState<Pokemon[]>([])
-  const [offset, setOffset] = useState(0)
-  const [isLoading, setIsLoading] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [search, setSearch] = useState('')
-  const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set())
-  const [currentGen, setCurrentGen] = useState<'all' | string>('all')
-  const [sortKey, setSortKey] = useState<SortKey>('id-asc')
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
-  const [favorites, setFavorites] = useState<Set<number>>(new Set())
+  const { state: urlState, update: updateUrl, reset: resetUrl } = useUrlState()
+  const { favorites, toggleFavorite, isFavorite } = useFavorites()
+  const pokedex = usePokedexData()
+  const teamsHook = useTeams()
+
+  const [search, setSearch] = useState(urlState.search)
+  const [activeTypes, setActiveTypes] = useState<Set<string>>(new Set(urlState.activeTypes))
+  const [currentGen, setCurrentGen] = useState<'all' | string>(urlState.currentGen)
+  const [sortKey, setSortKey] = useState<SortKey>(urlState.sortKey)
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(urlState.showFavoritesOnly)
+
   const [selectedPokemon, setSelectedPokemon] = useState<Pokemon | null>(null)
   const [modalPokemon, setModalPokemon] = useState<Pokemon | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [shinyMode, setShinyMode] = useState(false)
   const [modalShiny, setModalShiny] = useState(false)
   const [matchups, setMatchups] = useState<any>(null)
+  const [shinyMode, setShinyMode] = useState(false)
+  const [showTeamLab, setShowTeamLab] = useState(false)
+  const [matchupCache, setMatchupCache] = useState<Record<number, any>>({})
+  const [onlySpecial, setOnlySpecial] = useState(false)
+  const [minBst, setMinBst] = useState(0)
+  const [abilityFilter, setAbilityFilter] = useState('')
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
-  const totalAvailable = 1025
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('pokedex-favorites')
-      if (saved) setFavorites(new Set(JSON.parse(saved)))
-    } catch {}
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem('pokedex-favorites', JSON.stringify([...favorites]))
-  }, [favorites])
 
   const deferredSearch = useDeferredValue(search)
 
+  // Sync local filter state to URL
+  useEffect(() => {
+    updateUrl({
+      search,
+      activeTypes: Array.from(activeTypes),
+      currentGen,
+      sortKey,
+      showFavoritesOnly,
+      onlySpecial,
+      minBst,
+      abilityFilter,
+    })
+  }, [search, activeTypes, currentGen, sortKey, showFavoritesOnly, onlySpecial, minBst, abilityFilter, updateUrl])
+
+  // Initialize from URL on first load (one-time)
+  const hydratedRef = useRef(false)
+  useEffect(() => {
+    if (hydratedRef.current) return
+    hydratedRef.current = true
+    if (urlState.search) setSearch(urlState.search)
+    if (urlState.activeTypes.length) setActiveTypes(new Set(urlState.activeTypes))
+    if (urlState.currentGen !== 'all') setCurrentGen(urlState.currentGen)
+    if (urlState.sortKey !== 'id-asc') setSortKey(urlState.sortKey)
+    if (urlState.showFavoritesOnly) setShowFavoritesOnly(true)
+    if (urlState.onlySpecial) setOnlySpecial(true)
+    if (urlState.minBst > 0) setMinBst(urlState.minBst)
+    if (urlState.abilityFilter) setAbilityFilter(urlState.abilityFilter)
+  }, [urlState])
+
+  // Keyboard
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedPokemon) {
-        closeModal()
-      } else if (e.key === '/' && !selectedPokemon) {
+      if (e.key === 'Escape') {
+        if (showTeamLab) setShowTeamLab(false)
+        else if (selectedPokemon) closeModal()
+      } else if (e.key === '/' && !selectedPokemon && !showTeamLab) {
         e.preventDefault()
         searchInputRef.current?.focus()
         searchInputRef.current?.select()
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setShowTeamLab(v => !v)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [selectedPokemon])
+  }, [selectedPokemon, showTeamLab])
 
-  const cacheRef = useRef(new Map<number | string, Pokemon>())
-  const typeCacheRef = useRef(new Map<string, any>())
+  const { allPokemon, isLoading, hasMore, error, setError, loadInitial, loadMore, ensureDataForGen, fetchTypeMatchups, enrichPokemon, totalAvailable } = pokedex
+
+  // Load initial
+  useEffect(() => {
+    loadInitial()
+  }, [loadInitial])
 
   const playCry = useCallback((p: Pokemon) => {
     const url = p.cries?.latest || p.cries?.legacy
@@ -254,215 +106,9 @@ function App() {
       return
     }
     const audio = new Audio(url)
-    audio.addEventListener('error', () => {
-      toast.error('Could not play cry')
-    }, { once: true })
+    audio.addEventListener('error', () => toast.error('Could not play cry'), { once: true })
     audio.play().catch(() => {})
   }, [])
-
-  const fetchTypeMatchups = useCallback(async (typeName: string) => {
-    if (typeCacheRef.current.has(typeName)) return typeCacheRef.current.get(typeName)
-    try {
-      const r = await fetch(`https://pokeapi.co/api/v2/type/${typeName}`)
-      if (!r.ok) return null
-      const t = await r.json()
-      const rel = t.damage_relations || {}
-      const data = {
-        weak: (rel.double_damage_from || []).map((x: any) => x.name),
-        resist: (rel.half_damage_from || []).map((x: any) => x.name),
-        immune: (rel.no_damage_from || []).map((x: any) => x.name),
-      }
-      typeCacheRef.current.set(typeName, data)
-      return data
-    } catch { return null }
-  }, [])
-
-  const fetchEvolutionChain = useCallback(async (url: string): Promise<EvolutionStep[]> => {
-    try {
-      const res = await fetch(url)
-      if (!res.ok) return []
-      const chain = await res.json()
-
-      const steps: EvolutionStep[] = []
-      const walk = (node: any, prevCondition?: string) => {
-        if (!node) return
-        const id = parseInt(node.species.url.split('/').slice(-2, -1)[0])
-        const det = (node.evolution_details && node.evolution_details[0]) || {}
-        let cond = ''
-        if (det.min_level) cond = `Lv. ${det.min_level}`
-        else if (det.item?.name) cond = det.item.name.replace(/-/g, ' ')
-        else if (det.trigger?.name) {
-          cond = det.trigger.name.replace(/-/g, ' ')
-          if (det.min_happiness) cond += ` (hap ${det.min_happiness})`
-          if (det.time_of_day) cond += ` ${det.time_of_day}`
-        }
-        if (!cond && prevCondition) cond = prevCondition
-        steps.push({ name: node.species.name, id, condition: cond || undefined })
-        const children = node.evolves_to || []
-        children.forEach((c: any) => walk(c, cond))
-      }
-      walk(chain.chain)
-      return steps
-    } catch {
-      return []
-    }
-  }, [])
-
-  const fetchDetail = useCallback(async (id: number): Promise<Pokemon | null> => {
-    const cache = cacheRef.current
-    if (cache.has(id)) return cache.get(id)!
-
-    try {
-      const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${id}`)
-      if (!res.ok) return null
-      const data: any = await res.json()
-
-      let flavor = ''
-      let speciesData: any = {}
-      try {
-        const sp = await fetch(data.species.url)
-        if (sp.ok) {
-          speciesData = await sp.json()
-          const entry = speciesData.flavor_text_entries?.find((e: any) => e.language.name === 'en')
-          if (entry) flavor = entry.flavor_text.replace(/\f/g, ' ').replace(/\n/g, ' ')
-        }
-      } catch {}
-
-      const levelUp: { name: string; level: number }[] = []
-      const seenMoves = new Set<string>()
-      for (const m of (data.moves || [])) {
-        const v = (m.version_group_details || []).find((vd: any) => vd.move_learn_method?.name === 'level-up')
-        if (v) {
-          const nm = m.move.name
-          if (!seenMoves.has(nm)) {
-            seenMoves.add(nm)
-            levelUp.push({ name: nm, level: v.level_learned_at || 0 })
-          }
-        }
-      }
-      levelUp.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
-
-      const full: Pokemon = {
-        id: data.id,
-        name: data.name,
-        types: data.types,
-        sprites: data.sprites,
-        height: data.height,
-        weight: data.weight,
-        stats: data.stats,
-        abilities: data.abilities,
-        flavor_text: flavor || undefined,
-        base_experience: data.base_experience,
-        capture_rate: speciesData.capture_rate,
-        base_happiness: speciesData.base_happiness,
-        growth_rate: speciesData.growth_rate?.name,
-        hatch_counter: speciesData.hatch_counter,
-        gender_rate: speciesData.gender_rate,
-        egg_groups: speciesData.egg_groups?.map((g: any) => g.name) || [],
-        color: speciesData.color?.name,
-        habitat: speciesData.habitat?.name,
-        shape: speciesData.shape?.name,
-        genus: speciesData.genera?.find((g: any) => g.language.name === 'en')?.genus,
-        evolution_chain_url: speciesData.evolution_chain?.url,
-        cries: data.cries,
-        levelUpMoves: levelUp.slice(0, 8),
-        is_legendary: speciesData.is_legendary,
-        is_mythical: speciesData.is_mythical,
-        is_baby: speciesData.is_baby,
-      }
-      cache.set(full.id, full)
-      cache.set(full.name, full)
-      return full
-    } catch {
-      return null
-    }
-  }, [])
-
-  const loadBatch = useCallback(async (startOffset: number, count: number) => {
-    const listRes = await fetch(`https://pokeapi.co/api/v2/pokemon?limit=${count}&offset=${startOffset}`)
-    if (!listRes.ok) throw new Error('Failed to load list')
-    const list = await listRes.json()
-
-    const ids = list.results.map((_: any, i: number) => startOffset + i + 1)
-    const details = await Promise.all(ids.map((id: number) => fetchDetail(id)))
-
-    return details.filter((p): p is Pokemon => p !== null)
-  }, [fetchDetail])
-
-  const loadInitial = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
-    try {
-      const batch = await loadBatch(0, 80)
-      setAllPokemon(batch)
-      setOffset(80)
-      setHasMore(batch.length > 0 && 80 < totalAvailable)
-    } catch {
-      setError('Failed to load Pokémon. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [loadBatch])
-
-  useEffect(() => {
-    loadInitial()
-  }, [loadInitial])
-
-  const loadMore = useCallback(async () => {
-    if (isLoading || !hasMore) return
-    const currentOffset = offset
-    setIsLoading(true)
-    try {
-      const nextCount = Math.min(60, totalAvailable - currentOffset)
-      const batch = await loadBatch(currentOffset, nextCount)
-      if (batch.length > 0) {
-        setAllPokemon(prev => {
-          const existingIds = new Set(prev.map(p => p.id))
-          const unique = batch.filter(p => !existingIds.has(p.id))
-          return unique.length ? [...prev, ...unique] : prev
-        })
-        const newOffset = currentOffset + batch.length
-        setOffset(newOffset)
-        setHasMore(newOffset < totalAvailable)
-      } else {
-        setHasMore(false)
-      }
-    } catch {
-      toast.error('Failed to load more Pokémon')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [isLoading, hasMore, offset, loadBatch, totalAvailable])
-
-  const ensureDataForGen = async (gen: string) => {
-    const range = GEN_RANGES[gen]
-    if (!range) return
-    const target = range[0]
-    if (offset >= target) return
-
-    setIsLoading(true)
-    try {
-      let current = offset
-      while (current < target && current < totalAvailable) {
-        const count = Math.min(60, target - current)
-        const batch = await loadBatch(current, count)
-        if (batch.length === 0) break
-        setAllPokemon(prev => {
-          const existingIds = new Set(prev.map(p => p.id))
-          const unique = batch.filter(p => !existingIds.has(p.id))
-          return [...prev, ...unique]
-        })
-        current += batch.length
-        setOffset(current)
-        setHasMore(current < totalAvailable)
-        await new Promise(r => setTimeout(r, 30))
-      }
-    } catch {
-      // silent, user can still use load more
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   const toggleType = (type: string) => {
     const next = new Set(activeTypes)
@@ -473,22 +119,10 @@ function App() {
 
   const clearTypes = () => setActiveTypes(new Set())
 
-  const toggleFavorite = (id: number, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation()
-    const next = new Set(favorites)
-    const wasFav = next.has(id)
-    if (wasFav) next.delete(id)
-    else next.add(id)
-    setFavorites(next)
-
-    if (!wasFav) {
-      toast.success('Added to favorites', { description: `#${String(id).padStart(3, '0')}` })
-    }
-  }
-
   const toggleFavoritesView = () => {
-    setShowFavoritesOnly(!showFavoritesOnly)
-    if (!showFavoritesOnly) {
+    const next = !showFavoritesOnly
+    setShowFavoritesOnly(next)
+    if (next) {
       setSearch('')
       setActiveTypes(new Set())
       setCurrentGen('all')
@@ -525,7 +159,22 @@ function App() {
     }
 
     if (showFavoritesOnly) {
-      result = result.filter(p => favorites.has(p.id))
+      result = result.filter(p => isFavorite(p.id))
+    }
+
+    if (onlySpecial) {
+      result = result.filter(p => p.is_legendary || p.is_mythical)
+    }
+
+    if (minBst > 0) {
+      result = result.filter(p => getBst(p) >= minBst)
+    }
+
+    if (abilityFilter) {
+      const term = abilityFilter.trim().toLowerCase()
+      result = result.filter(p =>
+        p.abilities.some(a => a.ability.name.toLowerCase().includes(term))
+      )
     }
 
     result.sort((a, b) => {
@@ -545,7 +194,7 @@ function App() {
     })
 
     return result
-  }, [allPokemon, deferredSearch, activeTypes, currentGen, sortKey, showFavoritesOnly, favorites])
+  }, [allPokemon, deferredSearch, activeTypes, currentGen, sortKey, showFavoritesOnly, isFavorite, onlySpecial, minBst, abilityFilter])
 
   const openModal = async (pokemon: Pokemon) => {
     setSelectedPokemon(pokemon)
@@ -553,40 +202,17 @@ function App() {
     setModalShiny(false)
     setMatchups(null)
 
-    if (!pokemon.flavor_text || pokemon.stats.length === 0) {
-      const full = await fetchDetail(pokemon.id)
-      if (full) {
-        setModalPokemon(full)
-        setAllPokemon(prev => {
-          const idx = prev.findIndex(p => p.id === full.id)
-          if (idx !== -1) {
-            const copy = [...prev]
-            copy[idx] = full
-            return copy
-          }
-          return prev
-        })
-      }
-    }
-
-    if (pokemon.evolution_chain_url && !pokemon.evolutions) {
-      const evos = await fetchEvolutionChain(pokemon.evolution_chain_url)
-      const enriched = { ...pokemon, evolutions: evos }
+    const enriched = await enrichPokemon(pokemon)
+    if (enriched) {
       setModalPokemon(enriched)
-      setAllPokemon(prev => {
-        const idx = prev.findIndex(p => p.id === pokemon.id)
-        if (idx !== -1) {
-          const copy = [...prev]
-          copy[idx] = enriched
-          return copy
-        }
-        return prev
-      })
     }
 
     if (pokemon.types?.[0]) {
       const m = await fetchTypeMatchups(pokemon.types[0].type.name)
-      if (m) setMatchups(m)
+      if (m) {
+        setMatchups(m)
+        setMatchupCache(prev => ({ ...prev, [pokemon.id]: m }))
+      }
     }
   }
 
@@ -599,10 +225,7 @@ function App() {
 
   const navigateModal = (dir: number) => {
     if (!selectedPokemon) return
-    const pool = showFavoritesOnly
-      ? filtered
-      : filtered.length > 0 ? filtered : allPokemon
-
+    const pool = showFavoritesOnly ? filtered : (filtered.length > 0 ? filtered : allPokemon)
     const idx = pool.findIndex(p => p.id === selectedPokemon.id)
     if (idx === -1) return
     let nextIdx = idx + dir
@@ -626,17 +249,18 @@ function App() {
 
   const canShowLoadMore = !showFavoritesOnly && hasMore && !search && activeTypes.size === 0 && currentGen === 'all'
 
+  // Infinite scroll observer
   useEffect(() => {
-    if (!loadMoreRef.current || !canShowLoadMore || offset === 0) return
+    if (!loadMoreRef.current || !canShowLoadMore || pokedex.offset === 0) return
     const el = loadMoreRef.current
     const obs = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting && !isLoading) {
+      if (entries[0].isIntersecting && !pokedex.isLoading) {
         void loadMore()
       }
     }, { rootMargin: '200px' })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [canShowLoadMore, isLoading, loadMore, offset])
+  }, [canShowLoadMore, pokedex.isLoading, loadMore, pokedex.offset])
 
   const updateGen = (gen: string) => {
     setCurrentGen(gen as any)
@@ -652,6 +276,10 @@ function App() {
     setCurrentGen('all')
     setShowFavoritesOnly(false)
     setSortKey('id-asc')
+    setOnlySpecial(false)
+    setMinBst(0)
+    setAbilityFilter('')
+    resetUrl()
   }
 
   const openRandom = () => {
@@ -660,6 +288,8 @@ function App() {
     const pick = pool[Math.floor(Math.random() * pool.length)]
     openModal(pick)
   }
+
+  const displayedForTeam = allPokemon.length > 0 ? allPokemon : []
 
   return (
     <div className="min-h-screen bg-[#0a0c14] text-white">
@@ -693,6 +323,16 @@ function App() {
           </div>
 
           <div className="flex items-center gap-x-1 sm:gap-x-2">
+            <button
+              onClick={() => setShowTeamLab(true)}
+              aria-label="Open Team Lab"
+              className="flex items-center gap-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-medium border border-white/10 hover:bg-white/5"
+              title="Team Lab (⌘K)"
+            >
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Team Lab</span>
+            </button>
+
             <button
               onClick={toggleFavoritesView}
               aria-label={showFavoritesOnly ? 'Show all Pokémon' : 'Show favorites only'}
@@ -742,36 +382,19 @@ function App() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 sm:pt-6">
-        <div className="flex items-center justify-between mb-2 sm:mb-3 px-1">
-          <div className="uppercase text-[10px] sm:text-xs tracking-[1.5px] font-semibold text-gray-400">Types</div>
-          {activeTypes.size > 0 && (
-            <button onClick={clearTypes} aria-label="Clear type filters" className="text-[10px] sm:text-xs text-gray-400 hover:text-white flex items-center gap-1">
-              <X className="w-3 h-3" /> Clear
-            </button>
-          )}
-        </div>
-        <div className="flex gap-1 sm:gap-1.5 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory sm:flex-wrap sm:overflow-visible">
-          {ALL_TYPES.map(type => {
-            const active = activeTypes.has(type)
-            const color = TYPE_COLORS[type]
-            return (
-              <button
-                key={type}
-                onClick={() => toggleType(type)}
-                className={`type-filter px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold rounded-2xl border border-transparent flex-shrink-0 snap-start ${active ? 'active' : ''}`}
-                style={{
-                  backgroundColor: active ? color.bg : '#111827',
-                  color: active ? color.text : '#d1d5db'
-                }}
-              >
-                {type}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <Filters
+        activeTypes={activeTypes}
+        onToggleType={toggleType}
+        onClearTypes={clearTypes}
+        onlySpecial={onlySpecial}
+        onToggleSpecial={() => setOnlySpecial(!onlySpecial)}
+        minBst={minBst}
+        onToggleMinBst={() => setMinBst(minBst === 0 ? 500 : 0)}
+        abilityFilter={abilityFilter}
+        onAbilityChange={setAbilityFilter}
+      />
 
+      {/* Results header */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-1.5 flex items-center justify-between text-xs sm:text-sm">
         <div className="flex items-center gap-x-2 sm:gap-x-3 text-gray-400">
           <div className="font-medium text-white">{resultLabel}</div>
@@ -827,10 +450,12 @@ function App() {
               <PokemonCard
                 key={pokemon.id}
                 pokemon={pokemon}
-                isFavorite={favorites.has(pokemon.id)}
+                isFavorite={isFavorite(pokemon.id)}
                 onClick={() => openModal(pokemon)}
-                onToggleFavorite={(e) => toggleFavorite(pokemon.id, e)}
+                onToggleFavorite={(e) => { e.stopPropagation(); toggleFavorite(pokemon.id); }}
                 shiny={shinyMode}
+                onAddToTeam={showTeamLab ? (p) => teamsHook.addPokemonToActive(p) : undefined}
+                canAddToTeam={showTeamLab && teamsHook.getActiveMembers().length < 6}
               />
             ))
           )}
@@ -853,6 +478,7 @@ function App() {
         )}
       </main>
 
+      {/* Modal */}
       <AnimatePresence>
         {modalPokemon && selectedPokemon && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 p-0 sm:p-4" onClick={closeModal}>
@@ -909,11 +535,11 @@ function App() {
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <button
-                      onClick={(e) => { toggleFavorite(modalPokemon.id, e); }}
-                      aria-label={favorites.has(modalPokemon.id) ? 'Remove from favorites' : 'Add to favorites'}
+                      onClick={() => toggleFavorite(modalPokemon.id)}
+                      aria-label={isFavorite(modalPokemon.id) ? 'Remove from favorites' : 'Add to favorites'}
                       className="w-10 h-10 flex items-center justify-center text-2xl text-red-400/70 hover:text-red-400 transition-colors"
                     >
-                      <Heart fill={favorites.has(modalPokemon.id) ? 'currentColor' : 'none'} />
+                      <Heart fill={isFavorite(modalPokemon.id) ? 'currentColor' : 'none'} />
                     </button>
                     <button onClick={() => setModalShiny(!modalShiny)} aria-label="Toggle shiny" className={`text-xs px-2 py-0.5 rounded border flex items-center gap-1 ${modalShiny ? 'border-yellow-400 text-yellow-400' : 'border-white/20 text-white/60'}`}>
                       <Sparkles className="w-3 h-3" /> {modalShiny ? 'SHINY' : 'SHINY'}
@@ -923,11 +549,24 @@ function App() {
                         <Volume2 className="w-3 h-3" /> CRY
                       </button>
                     )}
+                    <button
+                      onClick={() => teamsHook.addPokemonToActive(modalPokemon)}
+                      className="text-xs px-2 py-0.5 rounded border border-emerald-500/40 text-emerald-400 flex items-center gap-1 hover:bg-emerald-500/10"
+                    >
+                      + TEAM
+                    </button>
                   </div>
                 </div>
 
                 <div className="flex gap-2 mb-6">
-                  {modalPokemon.types.map(t => getTypeBadge(t.type.name, true, () => { closeModal(); setShowFavoritesOnly(false); toggleType(t.type.name) }))}
+                  {modalPokemon.types.map(t => (
+                    <TypeBadge
+                      key={t.type.name}
+                      type={t.type.name}
+                      interactive
+                      onClick={() => { closeModal(); setShowFavoritesOnly(false); toggleType(t.type.name) }}
+                    />
+                  ))}
                 </div>
 
                 {modalPokemon.flavor_text && (
@@ -1012,15 +651,20 @@ function App() {
                     <span>Base Stats</span>
                     <span className="font-mono">Total {getBst(modalPokemon)}</span>
                   </div>
-                  <div className="space-y-2">
-                    {modalPokemon.stats.map(s => {
-                      const label = s.stat.name === 'hp' ? 'HP' :
-                        s.stat.name === 'attack' ? 'Attack' :
-                        s.stat.name === 'defense' ? 'Defense' :
-                        s.stat.name === 'special-attack' ? 'Sp. Atk' :
-                        s.stat.name === 'special-defense' ? 'Sp. Def' : 'Speed'
-                      return <StatBar key={s.stat.name} label={label} value={s.base_stat} />
-                    })}
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="space-y-2 flex-1">
+                      {modalPokemon.stats.map(s => {
+                        const label = s.stat.name === 'hp' ? 'HP' :
+                          s.stat.name === 'attack' ? 'Attack' :
+                          s.stat.name === 'defense' ? 'Defense' :
+                          s.stat.name === 'special-attack' ? 'Sp. Atk' :
+                          s.stat.name === 'special-defense' ? 'Sp. Def' : 'Speed'
+                        return <StatBar key={s.stat.name} label={label} value={s.base_stat} />
+                      })}
+                    </div>
+                    <div className="flex-shrink-0 -mt-2 sm:mt-0">
+                      <StatRadar stats={modalPokemon.stats} size={150} />
+                    </div>
                   </div>
                 </div>
 
@@ -1101,8 +745,42 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* Team Lab */}
+      <AnimatePresence>
+        {showTeamLab && (
+          <TeamLab
+            allPokemon={displayedForTeam}
+            favorites={favorites}
+            matchupCache={matchupCache}
+            teams={teamsHook.teams}
+            activeTeam={teamsHook.activeTeam}
+            activeTeamId={teamsHook.activeTeamId}
+            onAddPokemon={(p) => teamsHook.addPokemonToActive(p)}
+            onRemovePokemon={teamsHook.removePokemonFromActive}
+            onClear={teamsHook.clearActive}
+            onCreateTeam={() => teamsHook.createTeam()}
+            onDeleteTeam={teamsHook.deleteTeam}
+            onRenameTeam={teamsHook.renameTeam}
+            onSetActive={teamsHook.setActive}
+            onClose={() => setShowTeamLab(false)}
+            onEnsureMatchups={async (ids: number[]) => {
+              // Opportunistically enrich matchups for team members
+              for (const id of ids) {
+                if (!matchupCache[id]) {
+                  const p = allPokemon.find(x => x.id === id)
+                  if (p?.types?.[0]) {
+                    const m = await fetchTypeMatchups(p.types[0].type.name)
+                    if (m) setMatchupCache(prev => ({ ...prev, [id]: m }))
+                  }
+                }
+              }
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <footer className="max-w-7xl mx-auto px-6 pb-8 pt-4 text-center text-[10px] text-gray-600">
-        Production-ready Pokédex • React 19 + TypeScript + Tailwind 4 + Framer Motion • Powered by PokéAPI
+        Production-ready Pokédex • React 19 + TypeScript + Tailwind 4 • Powered by PokéAPI • Team Lab included
       </footer>
     </div>
   )
