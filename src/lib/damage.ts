@@ -48,8 +48,6 @@ export function calculateDamage(
 ): DamageResult {
   const atkStat = attacker.stats.find(s => s.stat.name === 'attack')?.base_stat || 80
   const defStat = defender.stats.find(s => s.stat.name === 'defense')?.base_stat || 80
-  const spAtk = attacker.stats.find(s => s.stat.name === 'special-attack')?.base_stat || 80
-  const spDef = defender.stats.find(s => s.stat.name === 'special-defense')?.base_stat || 80
 
   // Use physical or special based on move, default physical for preview
   const attack = atkStat
