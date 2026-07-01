@@ -33,13 +33,17 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      - name: Deploy
-        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+      - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v3
+        if: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || 'REDACTED_CLOUDFLARE_ACCOUNT_ID' }}
           command: pages deploy dist --project-name=pokedex --branch=master
-      - name: Skip deploy (no token)
+      - name: Note on deploy
         if: ${{ secrets.CLOUDFLARE_API_TOKEN == '' }}
-        run: echo "Deploy skipped - set CLOUDFLARE_API_TOKEN secret to enable"
+        run: |
+          echo "⚠️  Deploy skipped because CLOUDFLARE_API_TOKEN secret is not set."
+          echo "Set it following the README to enable automatic deploys."
+      - name: Always succeed for this job
+        run: echo "Job complete"
