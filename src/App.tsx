@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue, memo } from 'react'
-import { Heart, Search, X, ChevronLeft, ChevronRight, RefreshCw, Plus } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue, memo, Fragment } from 'react'
+import { Heart, Search, X, ChevronLeft, ChevronRight, RefreshCw, Plus, Volume2, Sparkles, Star } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
@@ -19,9 +19,17 @@ interface Ability {
 
 interface Sprites {
   front_default: string | null
+  front_shiny?: string | null
   other?: {
-    'official-artwork'?: { front_default: string | null }
+    'official-artwork'?: { front_default: string | null; front_shiny?: string | null }
+    home?: { front_default?: string | null; front_shiny?: string | null }
   }
+}
+
+interface EvolutionStep {
+  name: string
+  id: number
+  condition?: string
 }
 
 interface Pokemon {
@@ -34,6 +42,24 @@ interface Pokemon {
   stats: Stat[]
   abilities: Ability[]
   flavor_text?: string
+  base_experience?: number
+  capture_rate?: number
+  base_happiness?: number
+  growth_rate?: string
+  hatch_counter?: number
+  gender_rate?: number
+  egg_groups?: string[]
+  color?: string
+  habitat?: string
+  shape?: string
+  genus?: string
+  evolution_chain_url?: string
+  evolutions?: EvolutionStep[]
+  cries?: { latest?: string | null; legacy?: string | null }
+  levelUpMoves?: { name: string; level: number }[]
+  is_legendary?: boolean
+  is_mythical?: boolean
+  is_baby?: boolean
 }
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -77,9 +103,25 @@ const SORT_OPTIONS = [
   { value: 'name-asc', label: 'Name (A–Z)' },
   { value: 'name-desc', label: 'Name (Z–A)' },
   { value: 'hp', label: 'Highest HP' },
+  { value: 'bst', label: 'Highest BST' },
 ] as const
 
 type SortKey = typeof SORT_OPTIONS[number]['value']
+
+function getSprite(p: Pokemon, shiny = false): string {
+  const o = p.sprites.other?.['official-artwork']
+  if (shiny) {
+    if (o?.front_shiny) return o.front_shiny
+    if (p.sprites.front_shiny) return p.sprites.front_shiny
+  }
+  if (o?.front_default) return o.front_default
+  if (p.sprites.front_default) return p.sprites.front_default
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`
+}
+
+function getBst(p: Pokemon): number {
+  return p.stats.reduce((s, st) => s + (st.base_stat || 0), 0)
+}
 
 function getTypeBadge(type: string, interactive?: boolean, onClick?: () => void) {
   const color = TYPE_COLORS[type] || { bg: '#64748b', text: '#fff' }
@@ -94,15 +136,14 @@ function getTypeBadge(type: string, interactive?: boolean, onClick?: () => void)
   )
 }
 
-const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite }: {
+const PokemonCard = memo(function PokemonCard({ pokemon, isFavorite, onClick, onToggleFavorite, shiny }: {
   pokemon: Pokemon
   isFavorite: boolean
   onClick: () => void
   onToggleFavorite: (e: React.MouseEvent) => void
+  shiny?: boolean
 }) {
-  const sprite = pokemon.sprites.other?.['official-artwork']?.front_default ||
-    pokemon.sprites.front_default ||
-    `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.id}.png`
+  const sprite = getSprite(pokemon, !!shiny)
 
   return (
     <div onClick={onClick} className="pokedex-card group bg-[#111827] rounded-3xl overflow-hidden cursor-pointer flex flex-col touch-manipulation">
@@ -168,8 +209,12 @@ function App() {
   const [selectedPokemon, setSelectedPokemon] = useState<Pokemon | null>(null)
   const [modalPokemon, setModalPokemon] = useState<Pokemon | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [shinyMode, setShinyMode] = useState(false)
+  const [modalShiny, setModalShiny] = useState(false)
+  const [matchups, setMatchups] = useState<any>(null)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const loadMoreRef = useRef<HTMLDivElement>(null)
   const totalAvailable = 1025
 
   useEffect(() => {
@@ -200,6 +245,65 @@ function App() {
   }, [selectedPokemon])
 
   const cacheRef = useRef(new Map<number | string, Pokemon>())
+  const typeCacheRef = useRef(new Map<string, any>())
+
+  const playCry = useCallback((p: Pokemon) => {
+    const url = p.cries?.latest || p.cries?.legacy
+    if (!url) {
+      toast.error('No cry available')
+      return
+    }
+    const audio = new Audio(url)
+    audio.play().catch(() => toast.error('Could not play cry'))
+  }, [])
+
+  const fetchTypeMatchups = useCallback(async (typeName: string) => {
+    if (typeCacheRef.current.has(typeName)) return typeCacheRef.current.get(typeName)
+    try {
+      const r = await fetch(`https://pokeapi.co/api/v2/type/${typeName}`)
+      if (!r.ok) return null
+      const t = await r.json()
+      const rel = t.damage_relations || {}
+      const data = {
+        weak: (rel.double_damage_from || []).map((x: any) => x.name),
+        resist: (rel.half_damage_from || []).map((x: any) => x.name),
+        immune: (rel.no_damage_from || []).map((x: any) => x.name),
+      }
+      typeCacheRef.current.set(typeName, data)
+      return data
+    } catch { return null }
+  }, [])
+
+  const fetchEvolutionChain = useCallback(async (url: string): Promise<EvolutionStep[]> => {
+    try {
+      const res = await fetch(url)
+      if (!res.ok) return []
+      const chain = await res.json()
+
+      const steps: EvolutionStep[] = []
+      const walk = (node: any, prevCondition?: string) => {
+        if (!node) return
+        const id = parseInt(node.species.url.split('/').slice(-2, -1)[0])
+        const det = (node.evolution_details && node.evolution_details[0]) || {}
+        let cond = ''
+        if (det.min_level) cond = `Lv. ${det.min_level}`
+        else if (det.item?.name) cond = det.item.name.replace(/-/g, ' ')
+        else if (det.trigger?.name) {
+          cond = det.trigger.name.replace(/-/g, ' ')
+          if (det.min_happiness) cond += ` (hap ${det.min_happiness})`
+          if (det.time_of_day) cond += ` ${det.time_of_day}`
+        }
+        if (!cond && prevCondition) cond = prevCondition
+        steps.push({ name: node.species.name, id, condition: cond || undefined })
+        const children = node.evolves_to || []
+        children.forEach((c: any) => walk(c, cond))
+      }
+      walk(chain.chain)
+      return steps
+    } catch {
+      return []
+    }
+  }, [])
 
   const fetchDetail = useCallback(async (id: number): Promise<Pokemon | null> => {
     const cache = cacheRef.current
@@ -211,14 +315,29 @@ function App() {
       const data: any = await res.json()
 
       let flavor = ''
+      let speciesData: any = {}
       try {
         const sp = await fetch(data.species.url)
         if (sp.ok) {
-          const species = await sp.json()
-          const entry = species.flavor_text_entries?.find((e: any) => e.language.name === 'en')
+          speciesData = await sp.json()
+          const entry = speciesData.flavor_text_entries?.find((e: any) => e.language.name === 'en')
           if (entry) flavor = entry.flavor_text.replace(/\f/g, ' ').replace(/\n/g, ' ')
         }
       } catch {}
+
+      const levelUp: { name: string; level: number }[] = []
+      const seenMoves = new Set<string>()
+      for (const m of (data.moves || [])) {
+        const v = (m.version_group_details || []).find((vd: any) => vd.move_learn_method?.name === 'level-up')
+        if (v) {
+          const nm = m.move.name
+          if (!seenMoves.has(nm)) {
+            seenMoves.add(nm)
+            levelUp.push({ name: nm, level: v.level_learned_at || 0 })
+          }
+        }
+      }
+      levelUp.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
 
       const full: Pokemon = {
         id: data.id,
@@ -230,6 +349,23 @@ function App() {
         stats: data.stats,
         abilities: data.abilities,
         flavor_text: flavor || undefined,
+        base_experience: data.base_experience,
+        capture_rate: speciesData.capture_rate,
+        base_happiness: speciesData.base_happiness,
+        growth_rate: speciesData.growth_rate?.name,
+        hatch_counter: speciesData.hatch_counter,
+        gender_rate: speciesData.gender_rate,
+        egg_groups: speciesData.egg_groups?.map((g: any) => g.name) || [],
+        color: speciesData.color?.name,
+        habitat: speciesData.habitat?.name,
+        shape: speciesData.shape?.name,
+        genus: speciesData.genera?.find((g: any) => g.language.name === 'en')?.genus,
+        evolution_chain_url: speciesData.evolution_chain?.url,
+        cries: data.cries,
+        levelUpMoves: levelUp.slice(0, 8),
+        is_legendary: speciesData.is_legendary,
+        is_mythical: speciesData.is_mythical,
+        is_baby: speciesData.is_baby,
       }
       cache.set(full.id, full)
       cache.set(full.name, full)
@@ -254,10 +390,10 @@ function App() {
     setIsLoading(true)
     setError(null)
     try {
-      const batch = await loadBatch(0, 240)
+      const batch = await loadBatch(0, 80)
       setAllPokemon(batch)
-      setOffset(240)
-      setHasMore(batch.length > 0 && 240 < totalAvailable)
+      setOffset(80)
+      setHasMore(batch.length > 0 && 80 < totalAvailable)
     } catch {
       setError('Failed to load Pokémon. Please try again.')
     } finally {
@@ -269,12 +405,12 @@ function App() {
     loadInitial()
   }, [loadInitial])
 
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (isLoading || !hasMore) return
     const currentOffset = offset
     setIsLoading(true)
     try {
-      const nextCount = Math.min(72, totalAvailable - currentOffset)
+      const nextCount = Math.min(60, totalAvailable - currentOffset)
       const batch = await loadBatch(currentOffset, nextCount)
       if (batch.length > 0) {
         setAllPokemon(prev => [...prev, ...batch])
@@ -289,7 +425,7 @@ function App() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [isLoading, hasMore, offset, loadBatch, totalAvailable])
 
   const ensureDataForGen = async (gen: string) => {
     const range = GEN_RANGES[gen]
@@ -377,7 +513,7 @@ function App() {
     if (activeTypes.size > 0) {
       result = result.filter(p => {
         const types = p.types.map(t => t.type.name)
-        return Array.from(activeTypes).every(t => types.includes(t))
+        return Array.from(activeTypes).some(t => types.includes(t))
       })
     }
 
@@ -395,6 +531,9 @@ function App() {
         const hb = b.stats.find(s => s.stat.name === 'hp')?.base_stat || 0
         return hb - ha
       }
+      if (sortKey === 'bst') {
+        return getBst(b) - getBst(a)
+      }
       return 0
     })
 
@@ -404,6 +543,8 @@ function App() {
   const openModal = async (pokemon: Pokemon) => {
     setSelectedPokemon(pokemon)
     setModalPokemon(pokemon)
+    setModalShiny(false)
+    setMatchups(null)
 
     if (!pokemon.flavor_text || pokemon.stats.length === 0) {
       const full = await fetchDetail(pokemon.id)
@@ -420,11 +561,33 @@ function App() {
         })
       }
     }
+
+    if (pokemon.evolution_chain_url && !pokemon.evolutions) {
+      const evos = await fetchEvolutionChain(pokemon.evolution_chain_url)
+      const enriched = { ...pokemon, evolutions: evos }
+      setModalPokemon(enriched)
+      setAllPokemon(prev => {
+        const idx = prev.findIndex(p => p.id === pokemon.id)
+        if (idx !== -1) {
+          const copy = [...prev]
+          copy[idx] = enriched
+          return copy
+        }
+        return prev
+      })
+    }
+
+    if (pokemon.types?.[0]) {
+      const m = await fetchTypeMatchups(pokemon.types[0].type.name)
+      if (m) setMatchups(m)
+    }
   }
 
   const closeModal = () => {
     setSelectedPokemon(null)
     setModalPokemon(null)
+    setMatchups(null)
+    setModalShiny(false)
   }
 
   const navigateModal = (dir: number) => {
@@ -454,7 +617,19 @@ function App() {
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortKey)?.label
 
-  const canShowLoadMore = !showFavoritesOnly && hasMore
+  const canShowLoadMore = !showFavoritesOnly && hasMore && !search && activeTypes.size === 0 && currentGen === 'all'
+
+  useEffect(() => {
+    if (!loadMoreRef.current || !canShowLoadMore) return
+    const el = loadMoreRef.current
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !isLoading) {
+        void loadMore()
+      }
+    }, { rootMargin: '200px' })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [canShowLoadMore, isLoading, loadMore])
 
   const updateGen = (gen: string) => {
     setCurrentGen(gen as any)
@@ -470,6 +645,13 @@ function App() {
     setCurrentGen('all')
     setShowFavoritesOnly(false)
     setSortKey('id-asc')
+  }
+
+  const openRandom = () => {
+    const pool = filtered.length > 0 ? filtered : allPokemon
+    if (pool.length === 0) return
+    const pick = pool[Math.floor(Math.random() * pool.length)]
+    openModal(pick)
   }
 
   return (
@@ -489,8 +671,17 @@ function App() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search name or #"
-                className="search-input w-full bg-[#111827] border border-white/10 focus:border-red-500/50 pl-8 sm:pl-11 pr-3 sm:pr-4 py-2 sm:py-2.5 rounded-2xl text-sm placeholder:text-gray-500 outline-none"
+                className="search-input w-full bg-[#111827] border border-white/10 focus:border-red-500/50 pl-8 sm:pl-11 pr-8 sm:pr-9 py-2 sm:py-2.5 rounded-2xl text-sm placeholder:text-gray-500 outline-none"
               />
+              {search && (
+                <button
+                  onClick={() => { setSearch(''); searchInputRef.current?.focus() }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -502,6 +693,22 @@ function App() {
             >
               <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill={showFavoritesOnly ? 'currentColor' : 'none'} />
               <span>{favorites.size}</span>
+            </button>
+
+            <button
+              onClick={() => setShinyMode(!shinyMode)}
+              aria-label={shinyMode ? 'Disable shiny mode' : 'Enable shiny mode'}
+              className={`flex items-center gap-x-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-medium border transition-colors ${shinyMode ? 'bg-yellow-500/10 border-yellow-500/40 text-yellow-400' : 'border-white/10 hover:bg-white/5'}`}
+            >
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+
+            <button
+              onClick={openRandom}
+              aria-label="Open random Pokémon"
+              className="flex items-center gap-x-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-medium border border-white/10 hover:bg-white/5"
+            >
+              <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
 
             <div className="relative">
@@ -537,7 +744,7 @@ function App() {
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-1 sm:gap-1.5">
+        <div className="flex gap-1 sm:gap-1.5 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory sm:flex-wrap sm:overflow-visible">
           {ALL_TYPES.map(type => {
             const active = activeTypes.has(type)
             const color = TYPE_COLORS[type]
@@ -545,7 +752,7 @@ function App() {
               <button
                 key={type}
                 onClick={() => toggleType(type)}
-                className={`type-filter px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold rounded-2xl border border-transparent ${active ? 'active' : ''}`}
+                className={`type-filter px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold rounded-2xl border border-transparent flex-shrink-0 snap-start ${active ? 'active' : ''}`}
                 style={{
                   backgroundColor: active ? color.bg : '#111827',
                   color: active ? color.text : '#d1d5db'
@@ -616,6 +823,7 @@ function App() {
                 isFavorite={favorites.has(pokemon.id)}
                 onClick={() => openModal(pokemon)}
                 onToggleFavorite={(e) => toggleFavorite(pokemon.id, e)}
+                shiny={shinyMode}
               />
             ))
           )}
@@ -633,11 +841,14 @@ function App() {
             </button>
           </div>
         )}
+        {hasMore && !showFavoritesOnly && (
+          <div ref={loadMoreRef} className="h-2" />
+        )}
       </main>
 
       <AnimatePresence>
         {modalPokemon && selectedPokemon && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" onClick={closeModal}>
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 p-0 sm:p-4" onClick={closeModal}>
             <motion.div
               role="dialog"
               aria-modal="true"
@@ -647,9 +858,9 @@ function App() {
               exit={{ opacity: 0, y: 10, scale: 0.985 }}
               transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
               onClick={e => e.stopPropagation()}
-              className="w-full max-w-[95vw] sm:max-w-[460px] mx-auto bg-[#111827] rounded-3xl border border-white/10 shadow-2xl overflow-hidden pokemon-modal"
+              className="w-full sm:max-w-[460px] mx-auto bg-[#111827] rounded-t-3xl sm:rounded-3xl border border-white/10 shadow-2xl flex flex-col max-h-[85dvh] sm:max-h-[90vh] pokemon-modal overflow-hidden"
             >
-              <div className="relative px-6 pt-6 pb-2 bg-gradient-to-b from-black/40 to-transparent">
+              <div className="relative px-4 sm:px-6 pt-3 sm:pt-6 pb-1 sm:pb-2 bg-gradient-to-b from-black/40 to-transparent">
                 <div className="flex items-center justify-between">
                   <button onClick={closeModal} aria-label="Close details" className="modal-close w-9 h-9 flex items-center justify-center rounded-2xl text-white/70 hover:text-white">
                     <X className="w-5 h-5" />
@@ -665,35 +876,49 @@ function App() {
                 </div>
               </div>
 
-              <div className="px-4 sm:px-6 pb-5 sm:pb-6 -mt-1">
+              <div className="px-4 sm:px-6 pb-5 sm:pb-6 -mt-1 flex-1 overflow-y-auto">
                 <div className="flex justify-center -mt-2 mb-2">
                   <div className="relative w-40 h-40 sm:w-52 sm:h-52 flex items-center justify-center bg-[#0a0c14] rounded-[2.5rem] sm:rounded-[3rem]">
                     <img
-                      src={modalPokemon.sprites.other?.['official-artwork']?.front_default || modalPokemon.sprites.front_default || `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${modalPokemon.id}.png`}
+                      src={getSprite(modalPokemon, modalShiny)}
                       className="max-h-[130px] max-w-[130px] sm:max-h-[190px] sm:max-w-[190px] drop-shadow-2xl select-none"
-                      alt={modalPokemon.name}
+                      alt={modalPokemon.name + (modalShiny ? ' shiny' : '')}
                     />
                   </div>
                 </div>
 
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-3">
                   <div>
-                    <div className="font-mono text-xs tracking-[2px] text-red-400 font-semibold">
+                    <div className="font-mono text-xs tracking-[2px] text-red-400 font-semibold flex items-center gap-2">
                       #{String(modalPokemon.id).padStart(3, '0')}
+                      {modalPokemon.is_legendary && <span className="text-[10px] px-1.5 py-0 bg-yellow-500/20 text-yellow-400 rounded">LEGENDARY</span>}
+                      {modalPokemon.is_mythical && <span className="text-[10px] px-1.5 py-0 bg-purple-500/20 text-purple-400 rounded">MYTHICAL</span>}
+                      {modalPokemon.is_baby && <span className="text-[10px] px-1.5 py-0 bg-pink-500/20 text-pink-400 rounded">BABY</span>}
                     </div>
-                    <div className="text-4xl font-semibold tracking-tighter capitalize">{modalPokemon.name}</div>
+                    <div className="text-4xl font-semibold tracking-tighter capitalize flex items-center gap-2">{modalPokemon.name}</div>
+                    {modalPokemon.genus && (
+                      <div className="text-sm text-gray-400 mt-0.5">{modalPokemon.genus}</div>
+                    )}
                   </div>
-                  <button
-                    onClick={(e) => { toggleFavorite(modalPokemon.id, e); }}
-                    aria-label={favorites.has(modalPokemon.id) ? 'Remove from favorites' : 'Add to favorites'}
-                    className="mt-1 w-11 h-11 flex items-center justify-center text-3xl text-red-400/70 hover:text-red-400 transition-colors"
-                  >
-                    <Heart fill={favorites.has(modalPokemon.id) ? 'currentColor' : 'none'} />
-                  </button>
+                  <div className="flex flex-col items-end gap-1">
+                    <button
+                      onClick={(e) => { toggleFavorite(modalPokemon.id, e); }}
+                      aria-label={favorites.has(modalPokemon.id) ? 'Remove from favorites' : 'Add to favorites'}
+                      className="w-10 h-10 flex items-center justify-center text-2xl text-red-400/70 hover:text-red-400 transition-colors"
+                    >
+                      <Heart fill={favorites.has(modalPokemon.id) ? 'currentColor' : 'none'} />
+                    </button>
+                    <button onClick={() => setModalShiny(!modalShiny)} aria-label="Toggle shiny" className={`text-xs px-2 py-0.5 rounded border flex items-center gap-1 ${modalShiny ? 'border-yellow-400 text-yellow-400' : 'border-white/20 text-white/60'}`}>
+                      <Sparkles className="w-3 h-3" /> {modalShiny ? 'SHINY' : 'SHINY'}
+                    </button>
+                    <button onClick={() => playCry(modalPokemon)} aria-label="Play cry" className="text-xs px-2 py-0.5 rounded border border-white/20 text-white/60 flex items-center gap-1 hover:text-white">
+                      <Volume2 className="w-3 h-3" /> CRY
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex gap-2 mb-6">
-                  {modalPokemon.types.map(t => getTypeBadge(t.type.name, true, () => { closeModal(); toggleType(t.type.name) }))}
+                  {modalPokemon.types.map(t => getTypeBadge(t.type.name, true, () => { closeModal(); setShowFavoritesOnly(false); toggleType(t.type.name) }))}
                 </div>
 
                 {modalPokemon.flavor_text && (
@@ -711,10 +936,73 @@ function App() {
                     <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-px">Weight</div>
                     <div className="text-xl font-semibold tabular-nums">{(modalPokemon.weight / 10).toFixed(1)} kg</div>
                   </div>
+                  {modalPokemon.base_experience !== undefined && (
+                    <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                      <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-px">Base Exp</div>
+                      <div className="text-xl font-semibold tabular-nums">{modalPokemon.base_experience}</div>
+                    </div>
+                  )}
+                  {modalPokemon.capture_rate !== undefined && (
+                    <div className="bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                      <div className="text-[10px] uppercase tracking-widest text-gray-400 mb-px">Capture Rate</div>
+                      <div className="text-xl font-semibold tabular-nums">{modalPokemon.capture_rate}</div>
+                    </div>
+                  )}
                 </div>
 
+                {(modalPokemon.gender_rate !== undefined || modalPokemon.egg_groups?.length || modalPokemon.base_happiness !== undefined) && (
+                  <div className="mb-6">
+                    <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-2 px-1">Pokédex Data</div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {modalPokemon.gender_rate !== undefined && (
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                          <div className="text-[9px] text-gray-400">Gender</div>
+                          {modalPokemon.gender_rate === -1 ? 'Genderless' : (
+                            <div>
+                              ♂ {(8 - modalPokemon.gender_rate) / 8 * 100}% / ♀ {modalPokemon.gender_rate / 8 * 100}%
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {modalPokemon.egg_groups && modalPokemon.egg_groups.length > 0 && (
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                          <div className="text-[9px] text-gray-400">Egg Groups</div>
+                          <div className="capitalize">{modalPokemon.egg_groups.join(', ').replace(/-/g, ' ')}</div>
+                        </div>
+                      )}
+                      {modalPokemon.base_happiness !== undefined && (
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                          <div className="text-[9px] text-gray-400">Base Happiness</div>
+                          <div>{modalPokemon.base_happiness}</div>
+                        </div>
+                      )}
+                      {modalPokemon.growth_rate && (
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                          <div className="text-[9px] text-gray-400">Growth Rate</div>
+                          <div className="capitalize">{modalPokemon.growth_rate.replace(/-/g, ' ')}</div>
+                        </div>
+                      )}
+                      {modalPokemon.hatch_counter !== undefined && (
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                          <div className="text-[9px] text-gray-400">Hatch Steps</div>
+                          <div>{modalPokemon.hatch_counter * 255}</div>
+                        </div>
+                      )}
+                      {modalPokemon.color && (
+                        <div className="bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                          <div className="text-[9px] text-gray-400">Color</div>
+                          <div className="capitalize">{modalPokemon.color}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mb-5">
-                  <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-3 px-1">Base Stats</div>
+                  <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-3 px-1 flex justify-between">
+                    <span>Base Stats</span>
+                    <span className="font-mono">Total {getBst(modalPokemon)}</span>
+                  </div>
                   <div className="space-y-2">
                     {modalPokemon.stats.map(s => {
                       const label = s.stat.name === 'hp' ? 'HP' :
@@ -738,7 +1026,62 @@ function App() {
                     ))}
                   </div>
                 </div>
+
+                {modalPokemon.levelUpMoves && modalPokemon.levelUpMoves.length > 0 && (
+                  <div className="mb-5 mt-2">
+                    <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-2 px-1">Level-up Moves</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {modalPokemon.levelUpMoves.map((m, i) => (
+                        <div key={i} className="px-2 py-0.5 text-[10px] rounded-xl bg-white/5 border border-white/10 capitalize">{m.level ? `${m.level} ` : ''}{m.name.replace(/-/g, ' ')}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {modalPokemon.evolutions && modalPokemon.evolutions.length > 1 && (
+                  <div className="mb-2">
+                    <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-2 px-1">Evolution Chain</div>
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1">
+                      {modalPokemon.evolutions.map((evo, idx) => (
+                        <Fragment key={evo.id}>
+                          <button
+                            onClick={() => {
+                              const evoPokemon = allPokemon.find(p => p.id === evo.id) || { id: evo.id, name: evo.name } as Pokemon
+                              closeModal()
+                              setTimeout(() => openModal(evoPokemon as Pokemon), 50)
+                            }}
+                            className="flex flex-col items-center text-center px-2 py-1 rounded-xl hover:bg-white/5 min-w-[64px]"
+                          >
+                            <img
+                              src={getSprite({ id: evo.id, name: evo.name, sprites: { front_default: null } as any } as Pokemon, false)}
+                              className="w-10 h-10 object-contain"
+                              alt={evo.name}
+                            />
+                            <span className="text-[10px] capitalize mt-0.5">{evo.name}</span>
+                            {evo.condition && <span className="text-[9px] text-gray-400 mt-px">{evo.condition}</span>}
+                          </button>
+                          {idx < (modalPokemon.evolutions?.length || 0) - 1 && <span className="text-gray-500 mx-0.5">→</span>}
+                        </Fragment>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {matchups && (
+                <div className="px-4 sm:px-6 pb-3">
+                  <div className="text-[10px] uppercase tracking-[1px] font-semibold text-gray-400 mb-1.5">Type Matchups (defensive)</div>
+                  <div className="grid grid-cols-3 gap-1.5 text-[10px]">
+                    {matchups.weak?.length > 0 && <div className="bg-red-500/10 border border-red-500/30 rounded px-1.5 py-0.5">Weak: {matchups.weak.join(', ')}</div>}
+                    {matchups.resist?.length > 0 && <div className="bg-emerald-500/10 border border-emerald-500/30 rounded px-1.5 py-0.5">Resist: {matchups.resist.join(', ')}</div>}
+                    {matchups.immune?.length > 0 && <div className="bg-slate-500/10 border border-slate-500/30 rounded px-1.5 py-0.5">Immune: {matchups.immune.join(', ')}</div>}
+                  </div>
+                </div>
+              )}
+
+              {(modalPokemon.habitat || modalPokemon.shape) && (
+                <div className="px-4 sm:px-6 pb-2 text-[10px] text-gray-400">Habitat: {modalPokemon.habitat || '—'} • Shape: {modalPokemon.shape || '—'}</div>
+              )}
 
               <div className="border-t border-white/10 px-4 sm:px-6 py-3 sm:py-4 bg-[#0a0c14]/60 flex items-center justify-between text-xs">
                 <div className="text-gray-400">Data from PokéAPI</div>
