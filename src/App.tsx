@@ -9,6 +9,7 @@ import { useFavorites } from './hooks/useFavorites'
 import { usePokedexData } from './hooks/usePokedexData'
 import { useUrlState } from './hooks/useUrlState'
 import { useTeams } from './hooks/useTeams'
+
 import { PokemonCard } from './components/PokemonCard'
 import { StatBar } from './components/StatBar'
 import { TypeBadge } from './components/TypeBadge'
