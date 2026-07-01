@@ -39,6 +39,8 @@ function App() {
   const [onlySpecial, setOnlySpecial] = useState(false)
   const [minBst, setMinBst] = useState(0)
   const [abilityFilter, setAbilityFilter] = useState('')
+  const [compareList, setCompareList] = useState<Pokemon[]>([])
+  const [showCompare, setShowCompare] = useState(false)
 
   const searchInputRef = useRef<HTMLInputElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
@@ -335,6 +337,16 @@ function App() {
             </button>
 
             <button
+              onClick={() => { if (compareList.length > 0) setShowCompare(true); else { toast('Add Pokémon to compare from details modal') } }}
+              aria-label="Open Compare"
+              className={`flex items-center gap-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-medium border transition ${showCompare || compareList.length > 0 ? 'bg-blue-500/10 border-blue-500/40 text-blue-400' : 'border-white/10 hover:bg-white/5'}`}
+              title="Compare Pokémon"
+            >
+              <span>Compare</span>
+              {compareList.length > 0 && <span className="text-[10px] px-1">{compareList.length}</span>}
+            </button>
+
+            <button
               onClick={toggleFavoritesView}
               aria-label={showFavoritesOnly ? 'Show all Pokémon' : 'Show favorites only'}
               className={`flex items-center gap-x-1.5 sm:gap-x-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-medium border transition-colors ${showFavoritesOnly ? 'bg-red-500/10 border-red-500/40 text-red-400' : 'border-white/10 hover:bg-white/5'}`}
@@ -559,6 +571,17 @@ function App() {
                     >
                       + TEAM
                     </button>
+                    <button
+                      onClick={() => {
+                        if (compareList.length < 4 && !compareList.some(p => p.id === modalPokemon.id)) {
+                          setCompareList([...compareList, modalPokemon])
+                          setShowCompare(true)
+                        }
+                      }}
+                      className="text-xs px-2 py-0.5 rounded border border-blue-500/40 text-blue-400 flex items-center gap-1 hover:bg-blue-500/10"
+                    >
+                      + COMPARE
+                    </button>
                   </div>
                 </div>
 
@@ -768,7 +791,6 @@ function App() {
             onSetActive={teamsHook.setActive}
             onClose={() => setShowTeamLab(false)}
             onEnsureMatchups={async (ids: number[]) => {
-              // Opportunistically enrich matchups for team members
               for (const id of ids) {
                 if (!matchupCache[id]) {
                   const p = allPokemon.find(x => x.id === id)
@@ -780,6 +802,43 @@ function App() {
               }
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Compare View */}
+      <AnimatePresence>
+        {showCompare && compareList.length > 0 && (
+          <div className="fixed inset-0 z-[120] bg-black/90 flex flex-col p-4" onClick={() => setShowCompare(false)}>
+            <div className="max-w-7xl mx-auto w-full" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="text-xl font-semibold">Compare Pokémon</div>
+                <div className="flex gap-2">
+                  <button onClick={() => setCompareList([])} className="px-3 py-1 text-sm rounded border border-white/10">Clear</button>
+                  <button onClick={() => setShowCompare(false)} className="px-3 py-1 text-sm rounded border border-white/10">Close</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {compareList.map((p, idx) => (
+                  <div key={p.id} className="bg-[#111827] rounded-3xl p-4 border border-white/10">
+                    <div className="flex justify-between mb-2">
+                      <div>
+                        <div className="font-mono text-xs text-red-400">#{String(p.id).padStart(3,'0')}</div>
+                        <div className="text-lg capitalize font-semibold">{p.name}</div>
+                      </div>
+                      <button onClick={() => setCompareList(compareList.filter((_,i)=>i!==idx))} className="text-white/50 hover:text-red-400">×</button>
+                    </div>
+                    <img src={getSprite(p)} className="w-24 h-24 mx-auto object-contain" alt={p.name} />
+                    <div className="flex gap-1 justify-center my-2">{p.types.map(t => <TypeBadge key={t.type.name} type={t.type.name} />)}</div>
+                    <div className="text-xs text-gray-400">BST {getBst(p)}</div>
+                    <div className="mt-2 space-y-1 text-xs">
+                      {p.stats.slice(0,3).map(s => <div key={s.stat.name} className="flex justify-between"><span>{s.stat.name}</span><span>{s.base_stat}</span></div>)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-center text-xs text-gray-500 mt-4">Add up to 4 from detail modals • Click outside to close</div>
+            </div>
+          </div>
         )}
       </AnimatePresence>
 
